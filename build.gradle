@@ -134,6 +134,17 @@ startScripts {
                     ':execute\n@rem Clear UFT JVM hooks (can break OpenJFX Glass)\nset "JAVA_TOOL_OPTIONS="\nset "_JAVA_OPTIONS="\n@rem Setup the command line'
             )
         }
+        // GUI: launch with javaw.exe so Windows does not open a console window (java.exe still used for -version probe).
+        if (!ws.contains('set JAVAW_EXE=')) {
+            ws = ws.replace(
+                    'set JAVA_EXE=java.exe\n%JAVA_EXE% -version',
+                    'set JAVA_EXE=java.exe\nset JAVAW_EXE=javaw.exe\n%JAVA_EXE% -version'
+            )
+            ws = ws.replace(
+                    'set JAVA_EXE=%JAVA_HOME%/bin/java.exe\n\nif exist "%JAVA_EXE%" goto execute',
+                    'set JAVA_EXE=%JAVA_HOME%/bin/java.exe\nset JAVAW_EXE=%JAVA_HOME%/bin/javaw.exe\n\nif exist "%JAVA_EXE%" goto execute'
+            )
+        }
         def winCpMatcher = ws =~ /(?m)^set CLASSPATH=(.*)$/
         if (!winCpMatcher.find()) {
             throw new GradleException('startScripts: set CLASSPATH= not found in windows script')
@@ -148,15 +159,16 @@ startScripts {
         String winCpNew = winRest.join(';')
         ws = ws.replaceFirst(/(?m)^set CLASSPATH=.*$/,
                 Matcher.quoteReplacement("set JAVAFX_MODULE_PATH=${winMp}\nset CLASSPATH=${winCpNew}"))
-        def winJavaMatcher = ws =~ /"%JAVA_EXE%" %DEFAULT_JVM_OPTS% %JAVA_OPTS% %PROMPT_BUTLER_OPTS%\s+-classpath "%CLASSPATH%" com\.viruchith\.PromptButler\.PromptButlerApp %\*/
-        if (!winJavaMatcher.find()) {
-            throw new GradleException('startScripts: java invocation line not found or unexpected format in windows script')
+        def winLaunchLine = 'start "" "%JAVAW_EXE%" %DEFAULT_JVM_OPTS% %JAVA_OPTS% %PROMPT_BUTLER_OPTS% --module-path "%JAVAFX_MODULE_PATH%" --add-modules javafx.controls,javafx.graphics,javafx.base -classpath "%CLASSPATH%" com.viruchith.PromptButler.PromptButlerApp %*'
+        def winOldClasspathOnly = /"%JAVA_EXE%" %DEFAULT_JVM_OPTS% %JAVA_OPTS% %PROMPT_BUTLER_OPTS%\s+-classpath "%CLASSPATH%" com\.viruchith\.PromptButler\.PromptButlerApp %\*/
+        def winOldMpJavaExe = /"%JAVA_EXE%" %DEFAULT_JVM_OPTS% %JAVA_OPTS% %PROMPT_BUTLER_OPTS%\s+--module-path "%JAVAFX_MODULE_PATH%" --add-modules javafx\.controls,javafx\.graphics,javafx\.base -classpath "%CLASSPATH%" com\.viruchith\.PromptButler\.PromptButlerApp %\*/
+        if ((ws =~ winOldClasspathOnly).find()) {
+            ws = ws.replaceFirst(winOldClasspathOnly, Matcher.quoteReplacement(winLaunchLine))
+        } else if ((ws =~ winOldMpJavaExe).find()) {
+            ws = ws.replaceFirst(winOldMpJavaExe, Matcher.quoteReplacement(winLaunchLine))
+        } else {
+            throw new GradleException('startScripts: windows java launch line not matched (expected classpath-only or java.exe + module-path)')
         }
-        def winJavaNew = '"%JAVA_EXE%" %DEFAULT_JVM_OPTS% %JAVA_OPTS% %PROMPT_BUTLER_OPTS% --module-path "%JAVAFX_MODULE_PATH%" --add-modules javafx.controls,javafx.graphics,javafx.base -classpath "%CLASSPATH%" com.viruchith.PromptButler.PromptButlerApp %*'
-        ws = ws.replaceFirst(
-                /"%JAVA_EXE%" %DEFAULT_JVM_OPTS% %JAVA_OPTS% %PROMPT_BUTLER_OPTS%\s+-classpath "%CLASSPATH%" com\.viruchith\.PromptButler\.PromptButlerApp %\*/,
-                Matcher.quoteReplacement(winJavaNew)
-        )
         windowsScript.write(ws.replace('\n', '\r\n'))
 
         // --- Unix ---

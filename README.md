@@ -157,7 +157,7 @@ The repo includes the **Gradle Wrapper** (8.7); you do not need a global Gradle 
 After **`installDist`**, scripts and runtime layout are under:
 
 - **`build/install/prompt-butler/`** (name comes from `rootProject.name` in `settings.gradle`)
-- **Windows:** `build\install\prompt-butler\bin\prompt-butler.bat`
+- **Windows:** `build\install\prompt-butler\bin\prompt-butler.bat` — launches with **`javaw`** and **`start ""`**, so the JVM does not attach a console and the `cmd` window from double-clicking can close right away while the app keeps running.
 - **Unix / macOS:** `build/install/prompt-butler/bin/prompt-butler`
 
 If you use **Micro Focus UFT** (or any tool that sets `JAVA_TOOL_OPTIONS` / `_JAVA_OPTIONS`), rebuild after pulling changes so the scripts clear those variables before Java starts. If the app still fails to start, see [Troubleshooting](#troubleshooting).
