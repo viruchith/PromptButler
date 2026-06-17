@@ -21,6 +21,7 @@ PromptButler/
 ├── gradle.properties
 ├── gradle/wrapper/              # Gradle 8.7 wrapper
 ├── README.md                    # User-facing run/config notes
+├── TECHNICAL.md                 # Developer reference (architecture, packages, build internals)
 ├── PROJECT_STATE_CHECKPOINT.md  # This file
 ├── .gitignore
 └── src/

@@ -1,5 +1,7 @@
 package com.viruchith.PromptButler.ui;
 
+// SPDX-License-Identifier: GPL-3.0-only
+
 import com.viruchith.PromptButler.core.logging.AppLogger;
 import javafx.application.Platform;
 import javafx.stage.Stage;
@@ -11,7 +13,8 @@ import java.io.InputStream;
 import java.util.Objects;
 
 /**
- * Minimal AWT system tray integration for {@link com.viruchith.PromptButler.core.model.AutoHideMode#TRAY}.
+ * Minimal AWT {@link SystemTray} integration: context menu to show the JavaFX {@link Stage} or exit.
+ * Tray image is derived from {@code /appicon.png} when available.
  */
 public final class TrayIntegration {
 

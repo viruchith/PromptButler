@@ -10,7 +10,7 @@
 
 Templates are stored as **JSON** on disk (with optional **import/export**), UUID-based ids, and a **configurable data folder** so you can keep prompts next to projects or in a shared drive.
 
-For maintainers and deep technical context (architecture, UFT/Java agents, UI flows), see **[`PROJECT_STATE_CHECKPOINT.md`](PROJECT_STATE_CHECKPOINT.md)**.
+For **developers** (architecture, packages, build internals, extension points), see **[`TECHNICAL.md`](TECHNICAL.md)**. For narrative / checkpoint-style project state (including UFT/Java agent notes), see **[`PROJECT_STATE_CHECKPOINT.md`](PROJECT_STATE_CHECKPOINT.md)**.
 
 ---
 
@@ -18,6 +18,7 @@ For maintainers and deep technical context (architecture, UFT/Java agents, UI fl
 
 ## Table of contents
 
+- [Technical reference (developers)](#technical-reference-developers)
 - [What you can do with Prompt Butler](#what-you-can-do-with-prompt-butler)
 - [How to use](#how-to-use)
 - [Quick start (run from source)](#quick-start-run-from-source)
@@ -25,6 +26,7 @@ For maintainers and deep technical context (architecture, UFT/Java agents, UI fl
 - [Tests and coverage](#tests-and-coverage)
 - [Publishing and distribution](#publishing-and-distribution)
 - [Configuration and data files](#configuration-and-data-files)
+- [License](#license)
 - [Troubleshooting](#troubleshooting)
 
 ---
@@ -215,6 +217,20 @@ The Gradle **`maven-publish`** plugin is **not** configured here. To publish the
 
 ---
 
+## Technical reference (developers)
+
+See **[TECHNICAL.md](TECHNICAL.md)** for package layout, startup sequence, JavaFX stage/scene decisions, `MainView` / `MainViewModel` responsibilities, JSON and schema flow, clipboard abstraction, hotkey and tray wiring, testing scope, and suggested extension points.
+
+---
+
+## License
+
+Prompt Butler is [free software](https://www.gnu.org/philosophy/free-sw.html) licensed under the **GNU General Public License v3.0** — see the [`LICENSE`](LICENSE) file.
+
+Third-party runtime components (OpenJFX, Gson, jNativeHook, Ikonli, etc.) are listed with SPDX identifiers in [`NOTICE`](NOTICE). Compliance when **distributing** binaries is your responsibility (compatible licenses, attribution, and any GPL source-offer obligations for the combined work).
+
+---
+
 ## Troubleshooting
 
 - **Micro Focus UFT / `JAVA_TOOL_OPTIONS`:** The `run` task strips `JAVA_TOOL_OPTIONS` and `_JAVA_OPTIONS` from the **application** process. `applicationDefaultJvmArgs` includes `--add-exports` / `--add-opens` for Glass as a safety net if you launch without Gradle.
@@ -226,9 +242,11 @@ The Gradle **`maven-publish`** plugin is **not** configured here. To publish the
 ## Repository layout (short)
 
 - **`src/main/java/com/viruchith/PromptButler/`** — `PromptButlerApp`, `core/` (no JavaFX), `ui/`, `os/`
-- **`src/main/resources/`** — default prompts, CSS, seeds
+- **`src/main/resources/`** — default prompts, CSS, seeds, `appicon.png`
 - **`build.gradle`** — Java 17 toolchain, OpenJFX 21, JaCoCo, `installDist` / `run`
+- **`TECHNICAL.md`** — developer-oriented architecture and implementation notes
+- **`LICENSE`** — GNU GPL v3.0; **`NOTICE`** — third-party library SPDX summary
 
 ---
 
-*Prompt Butler — JavaFX prompt library, clipboard workflow, and global hotkey for faster writing and coding.*
+*Prompt Butler — JavaFX prompt library, clipboard workflow, and global hotkey for faster writing and coding. Licensed under GPLv3.*

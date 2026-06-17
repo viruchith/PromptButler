@@ -1,5 +1,7 @@
 package com.viruchith.PromptButler.ui;
 
+// SPDX-License-Identifier: GPL-3.0-only
+
 import com.viruchith.PromptButler.core.clipboard.ClipboardPort;
 import com.viruchith.PromptButler.core.model.PromptTemplate;
 import com.viruchith.PromptButler.core.service.ImportExportService;
@@ -55,6 +57,23 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
+/**
+ * Primary JavaFX UI for the overlay: search, template list, toolbar, and auxiliary {@link Stage}s
+ * (read-only detail, modeless variable fill-in).
+ * <p>
+ * Responsibilities include:
+ * </p>
+ * <ul>
+ *   <li><b>Title strip</b> — app icon, “Prompt Butler” label, full-width drag handle (no OS title bar under
+ *       {@link javafx.stage.StageStyle#TRANSPARENT})</li>
+ *   <li><b>List</b> — fuzzy-filtered items from {@link MainViewModel#getFilteredList()}; single-click detail timer;
+ *       double-click / Enter runs {@link #onTemplateChosen(com.viruchith.PromptButler.core.model.PromptTemplate)}</li>
+ *   <li><b>Variables</b> — separate modeless window; copy paths use {@link #copyPlainTextThenMaybeHide(String, boolean)}
+ *       so “Copy &amp; close” does not hide the main stage</li>
+ *   <li><b>Clipboard</b> — {@link ClipboardPort}; {@link #hideOverlay()} clears retained adapter state</li>
+ *   <li><b>Import/export / data folder</b> — file and directory choosers; restart notices for pointer changes</li>
+ * </ul>
+ */
 public final class MainView extends VBox {
 
     /** Base light theme (dialogs do not inherit the main scene stylesheet). */
@@ -112,8 +131,11 @@ public final class MainView extends VBox {
         VBox.setVgrow(listView, Priority.ALWAYS);
     }
 
+    /* ----- Title bar: icon + undecorated window drag ----- */
+
     /**
-     * {@link javafx.stage.StageStyle#TRANSPARENT} removes the native title bar; dragging must be implemented in-scene.
+     * Loads {@code /appicon.png} for the in-scene title strip (taskbar icon is set on the {@link Stage} in
+     * {@link com.viruchith.PromptButler.PromptButlerApp}).
      */
     private static ImageView createTitleBarIcon() {
         ImageView iv = new ImageView();
@@ -133,6 +155,10 @@ public final class MainView extends VBox {
         return iv;
     }
 
+    /**
+     * {@link javafx.stage.StageStyle#TRANSPARENT} removes the native title bar; the user drags this
+     * {@code dragHandle} node (the title {@link HBox}) to reposition the {@link Stage}.
+     */
     private static void installUndecoratedStageDrag(Node dragHandle, Stage stage) {
         final double[] offset = new double[2];
         dragHandle.addEventFilter(MouseEvent.MOUSE_PRESSED, e -> {
@@ -149,10 +175,14 @@ public final class MainView extends VBox {
         });
     }
 
+    /* ----- Search field: bidirectional bind to view model (trim applied when filtering) ----- */
+
     private void configureSearch() {
         searchField.setPromptText("Search prompts…");
         searchField.textProperty().bindBidirectional(viewModel.searchTextProperty());
     }
+
+    /* ----- List: fuzzy-filtered items, row copy, single-/double-click semantics ----- */
 
     private void configureList() {
         listView.setItems(viewModel.getFilteredList());
@@ -387,6 +417,8 @@ public final class MainView extends VBox {
         b.getStyleClass().add("icon-toolbar-button");
     }
 
+    /* ----- Global key filter on main scene (list navigation, Escape, template activation) ----- */
+
     public void attachGlobalKeys() {
         if (stage.getScene() == null) {
             return;
@@ -468,6 +500,10 @@ public final class MainView extends VBox {
         });
     }
 
+    /**
+     * Invoked after double-click or Enter on a row: either copies raw body and hides overlay, or opens the
+     * modeless variable window when the template body contains {@code {{placeholders}}}.
+     */
     private void onTemplateChosen(PromptTemplate t) {
         List<String> vars = viewModel.variablesFor(t);
         if (vars.isEmpty()) {
@@ -481,6 +517,7 @@ public final class MainView extends VBox {
         return variableParamsStage != null && variableParamsStage.isShowing();
     }
 
+    /** Builds the modeless variable form; main list stays usable. */
     private void openVariableParametersWindow(PromptTemplate t, List<String> vars) {
         closeVariableParametersWindow();
         variableTarget = t;
@@ -595,6 +632,8 @@ public final class MainView extends VBox {
         }
     }
 
+    /* ----- Clipboard: delegate to ClipboardPort; optional stage hide (defers hide to avoid Glass issues) ----- */
+
     private void copyToClipboardAndHide(String text) {
         copyPlainTextThenMaybeHide(text, true);
     }
@@ -640,6 +679,8 @@ public final class MainView extends VBox {
         stage.hide();
         clipboard.clearRetainedSensitiveData();
     }
+
+    /* ----- Toolbar: JSON import/export ----- */
 
     private void onImport() {
         FileChooser ch = new FileChooser();

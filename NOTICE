@@ -1,0 +1,23 @@
+Prompt Butler — third-party runtime components
+================================================
+
+This application (Prompt Butler) is licensed under the GNU General Public
+License v3.0 — see the LICENSE file in this repository.
+
+The following components are redistributed or linked at runtime. Their
+licenses apply to their respective source distributions (not to Prompt
+Butler’s own source except as combined works under the GPL).
+
+| Component | Version (see build.gradle) | SPDX / license (summary) |
+|-----------|---------------------------|--------------------------|
+| OpenJFX (javafx.controls, javafx.graphics) | 21.0.6 | GPL v2 + Classpath Exception (GPL-2.0-with-classpath-exception) |
+| Gson | 2.10.1 | Apache-2.0 |
+| jNativeHook (com.github.kwhat) | 2.2.2 | LGPL-3.0-or-later / dual-licensed upstream — consult upstream NOTICE |
+| Ikonli (ikonli-javafx, fontawesome5-pack) | 12.3.1 | Apache-2.0 |
+
+Upstream home pages / sources:
+
+- https://openjfx.io/
+- https://github.com/google/gson
+- https://github.com/kwhat/jnativehook
+- https://github.com/kordamp/ikonli

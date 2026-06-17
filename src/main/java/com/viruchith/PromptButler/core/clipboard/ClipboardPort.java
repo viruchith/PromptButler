@@ -1,7 +1,13 @@
 package com.viruchith.PromptButler.core.clipboard;
 
+// SPDX-License-Identifier: GPL-3.0-only
+
 /**
  * Clipboard abstraction for testability and post-copy buffer hygiene.
+ * <p>
+ * Implementations may retain character arrays for wiping via {@link #clearRetainedSensitiveData()};
+ * that call does <strong>not</strong> clear the OS clipboard.
+ * </p>
  */
 public interface ClipboardPort {
 

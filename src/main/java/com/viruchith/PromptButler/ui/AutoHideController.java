@@ -1,5 +1,7 @@
 package com.viruchith.PromptButler.ui;
 
+// SPDX-License-Identifier: GPL-3.0-only
+
 import com.viruchith.PromptButler.core.logging.AppLogger;
 import com.viruchith.PromptButler.core.model.AutoHideMode;
 import com.viruchith.PromptButler.core.model.UserPreferences;
@@ -13,7 +15,8 @@ import java.util.Objects;
 import java.util.function.Consumer;
 
 /**
- * Applies defocus auto-hide behavior based on {@link UserPreferences}.
+ * Listens to {@link Stage#focusedProperty()}; when the stage loses focus, applies {@link AutoHideMode}
+ * from {@link UserPreferences} (reduce opacity, minimize, hide to tray, or hide completely).
  */
 public final class AutoHideController {
 

@@ -1,5 +1,7 @@
 package com.viruchith.PromptButler.ui;
 
+// SPDX-License-Identifier: GPL-3.0-only
+
 import com.viruchith.PromptButler.core.model.PromptTemplate;
 import com.viruchith.PromptButler.core.repository.PromptRepository;
 import com.viruchith.PromptButler.core.util.InputText;
@@ -21,6 +23,14 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 
+/**
+ * FX-friendly view model: owns the in-memory prompt library, drives fuzzy filtering, and bridges to
+ * {@link com.viruchith.PromptButler.core.repository.PromptRepository} for persistence.
+ * <p>
+ * UI binds to {@link #searchTextProperty()} and {@link #getFilteredList()}; mutations call
+ * {@link #refreshFilter()} after repository writes.
+ * </p>
+ */
 public final class MainViewModel {
 
     private final PromptRepository repository;
