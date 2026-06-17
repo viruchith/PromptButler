@@ -1,5 +1,7 @@
 package com.viruchith.PromptButler.ui;
 
+// SPDX-License-Identifier: GPL-3.0-only
+
 import com.viruchith.PromptButler.core.model.BuildProfile;
 import javafx.scene.Scene;
 import javafx.scene.paint.Color;
@@ -8,6 +10,10 @@ import javafx.stage.StageStyle;
 
 import java.util.Objects;
 
+/**
+ * Shared JavaFX {@link Stage} and {@link Scene} settings for the floating overlay: transparent style
+ * (no native decorations), always-on-top, and transparent scene fill so rounded CSS panels show correctly.
+ */
 public final class OverlayStageFactory {
 
     private OverlayStageFactory() {

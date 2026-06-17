@@ -1,5 +1,7 @@
 package com.viruchith.PromptButler.os;
 
+// SPDX-License-Identifier: GPL-3.0-only
+
 import com.github.kwhat.jnativehook.GlobalScreen;
 import com.github.kwhat.jnativehook.NativeHookException;
 import com.github.kwhat.jnativehook.keyboard.NativeKeyEvent;
@@ -11,7 +13,12 @@ import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * Global shortcut: {@code Ctrl+Alt+P} (Windows/Linux) or {@code Cmd+Alt+P} (macOS).
+ * Registers a global native keyboard listener (jNativeHook) so the overlay can be toggled with
+ * {@code Ctrl+Alt+P} (Windows/Linux) or {@code Cmd+Alt+P} (macOS). Callback runs on the native thread —
+ * callers must {@code Platform.runLater} before touching JavaFX {@link javafx.stage.Stage} state.
+ * <p>
+ * A simple re-arm on {@code VC_P} release avoids repeat firing while the chord is held.
+ * </p>
  */
 public final class JNativeHookHotkeyService implements NativeKeyListener {
 

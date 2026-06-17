@@ -1,5 +1,7 @@
 package com.viruchith.PromptButler.core.model;
 
+// SPDX-License-Identifier: GPL-3.0-only
+
 import com.viruchith.PromptButler.core.util.InputText;
 
 import java.util.ArrayList;
@@ -9,6 +11,10 @@ import java.util.Objects;
 
 /**
  * Immutable prompt template (id, title, body with {@code {{var}}} placeholders, tags).
+ * <p>
+ * Constructor normalizes all text fields via {@link com.viruchith.PromptButler.core.util.InputText}
+ * and drops blank tags so persisted and UI-derived data stay consistent.
+ * </p>
  */
 public final class PromptTemplate {
 

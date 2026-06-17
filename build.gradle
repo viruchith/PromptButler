@@ -1,3 +1,9 @@
+/*
+ * Prompt Butler — Gradle build.
+ * SPDX-License-Identifier: GPL-3.0-only
+ * Copyright (C) 2026 Prompt Butler contributors.
+ */
+
 plugins {
     id 'java'
     id 'application'

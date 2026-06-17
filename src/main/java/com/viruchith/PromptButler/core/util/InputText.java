@@ -1,5 +1,7 @@
 package com.viruchith.PromptButler.core.util;
 
+// SPDX-License-Identifier: GPL-3.0-only
+
 /**
  * Normalizes raw UI / file input before business logic runs.
  */

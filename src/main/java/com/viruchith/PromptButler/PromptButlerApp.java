@@ -1,5 +1,16 @@
 package com.viruchith.PromptButler;
 
+// SPDX-License-Identifier: GPL-3.0-only
+/*
+ * Prompt Butler — JavaFX overlay for reusable prompts and clipboard workflows.
+ * Copyright (C) 2026 Prompt Butler contributors.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version. See the LICENSE file.
+ */
+
 import com.viruchith.PromptButler.core.logging.AppLogger;
 import com.viruchith.PromptButler.core.model.BuildProfile;
 import com.viruchith.PromptButler.core.model.PromptTemplate;
@@ -37,6 +48,14 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.List;
 
+/**
+ * JavaFX {@link Application} entry point: resolves storage, loads or seeds prompts, builds the
+ * transparent overlay {@link Stage}, wires global hotkey and optional tray, and registers auto-hide
+ * behaviour from {@link com.viruchith.PromptButler.core.model.UserPreferences}.
+ * <p>
+ * Closing the window hides it ({@code setImplicitExit(false)}); exit is explicit via toolbar or tray.
+ * </p>
+ */
 public final class PromptButlerApp extends Application {
 
     private MainView mainView;
@@ -70,6 +89,10 @@ public final class PromptButlerApp extends Application {
         }
     }
 
+    /**
+     * Wires persistence, UI, system integration (tray, hotkey, auto-hide), then shows the stage.
+     * Heavy lifting is delegated to {@link MainView} / {@link MainViewModel}; this method only composes services.
+     */
     private void startApplication(Stage stage, BuildProfile profile) throws Exception {
         Path dataDir = StoragePaths.resolveDataDirectory();
         SafePathResolver resolver;
@@ -185,6 +208,7 @@ public final class PromptButlerApp extends Application {
         mainView.focusSearch();
     }
 
+    /** Hotkey callback (native thread): must hop to FX thread before touching {@link Stage}. */
     private void toggleVisibility(Stage stage) {
         Platform.runLater(new Runnable() {
             @Override
@@ -204,6 +228,7 @@ public final class PromptButlerApp extends Application {
         });
     }
 
+    /** Undecorated stages need an explicit resize affordance; this region sits above the SE corner of the shell. */
     private static Region createSouthEastResizeGrip(Stage stage, double minWidth, double minHeight) {
         Region grip = new Region();
         grip.setPickOnBounds(true);
@@ -229,6 +254,7 @@ public final class PromptButlerApp extends Application {
         return grip;
     }
 
+    /** Taskbar / alt-tab icon; separate from in-scene title bar {@link com.viruchith.PromptButler.ui.MainView} icon. */
     private static void loadApplicationIcon(Stage stage) {
         try (InputStream in = PromptButlerApp.class.getResourceAsStream("/appicon.png")) {
             if (in == null) {

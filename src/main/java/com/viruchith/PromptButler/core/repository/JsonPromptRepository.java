@@ -1,5 +1,7 @@
 package com.viruchith.PromptButler.core.repository;
 
+// SPDX-License-Identifier: GPL-3.0-only
+
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.viruchith.PromptButler.core.model.PromptTemplate;
@@ -15,6 +17,10 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 
+/**
+ * Gson-backed {@link PromptRepository} for a single {@code prompts.json} file: validates JSON shape
+ * before parse, pretty-prints on save, maps DTOs to immutable {@link PromptTemplate} instances.
+ */
 public final class JsonPromptRepository implements PromptRepository {
 
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
