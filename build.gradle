@@ -4,6 +4,8 @@
  * Copyright (C) 2026 Prompt Butler contributors.
  */
 
+import java.util.regex.Matcher
+
 plugins {
     id 'java'
     id 'application'
@@ -44,13 +46,13 @@ javafx {
     modules = ['javafx.controls', 'javafx.graphics']
 }
 
+def javafxArtifactsVersion = javafx.version
+
 application {
     mainClass = 'com.viruchith.PromptButler.PromptButlerApp'
-    // Keep all JVM flags here: setting jvmArgs on :run alone can override these defaults (Gradle 8.x).
+    // Glass / UFT: valid once JavaFX is on --module-path (see startScripts rewrite below).
     applicationDefaultJvmArgs = [
             '-Dfile.encoding=UTF-8',
-            // Micro Focus UFT Java Support reflects into Glass; without this, Stage.show() fails with
-            // IllegalAccessError when UFT hooks the JVM (JAVA_TOOL_OPTIONS / _JAVA_OPTIONS).
             '--add-exports=javafx.graphics/com.sun.glass.ui=ALL-UNNAMED',
             '--add-opens=javafx.graphics/com.sun.glass.ui=ALL-UNNAMED'
     ]
@@ -108,6 +110,94 @@ jacocoTestCoverageVerification {
                 minimum = 0.80
             }
         }
+    }
+}
+
+// installDist runs "java -cp …" by default; OpenJFX 11+ needs JavaFX on --module-path + --add-modules.
+// Rewrite start scripts: move platform javafx-(base|graphics|controls)-*-(win|linux|mac…).jar off CLASSPATH.
+startScripts {
+    doLast {
+        def isPlatformJavafxJar = { String entry ->
+            def n = entry.replace('\\', '/')
+            (n =~ /javafx-(base|graphics|controls)-\d+\.\d+\.\d+-(win|linux|mac|mac-aarch64)\.jar$/).find()
+        }
+        def isJavafxProjectJar = { String entry ->
+            def base = entry.replace('\\', '/').tokenize('/').last()
+            base.startsWith('javafx-')
+        }
+
+        // --- Windows ---
+        String ws = windowsScript.text.replace('\r\n', '\n')
+        if (!ws.contains('@rem Clear UFT JVM hooks')) {
+            ws = ws.replace(
+                    ':execute\n@rem Setup the command line',
+                    ':execute\n@rem Clear UFT JVM hooks (can break OpenJFX Glass)\nset "JAVA_TOOL_OPTIONS="\nset "_JAVA_OPTIONS="\n@rem Setup the command line'
+            )
+        }
+        def winCpMatcher = ws =~ /(?m)^set CLASSPATH=(.*)$/
+        if (!winCpMatcher.find()) {
+            throw new GradleException('startScripts: set CLASSPATH= not found in windows script')
+        }
+        List<String> winEntries = winCpMatcher.group(1).split(';').collect { it.trim() }.findAll { !it.isEmpty() }
+        List<String> winFx = winEntries.findAll { isPlatformJavafxJar(it) }.sort()
+        List<String> winRest = winEntries.findAll { !isJavafxProjectJar(it) }
+        if (winFx.isEmpty()) {
+            throw new GradleException("startScripts: no platform javafx-*.jar on CLASSPATH (entries: ${winEntries})")
+        }
+        String winMp = winFx.join(';')
+        String winCpNew = winRest.join(';')
+        ws = ws.replaceFirst(/(?m)^set CLASSPATH=.*$/,
+                Matcher.quoteReplacement("set JAVAFX_MODULE_PATH=${winMp}\nset CLASSPATH=${winCpNew}"))
+        def winJavaMatcher = ws =~ /"%JAVA_EXE%" %DEFAULT_JVM_OPTS% %JAVA_OPTS% %PROMPT_BUTLER_OPTS%\s+-classpath "%CLASSPATH%" com\.viruchith\.PromptButler\.PromptButlerApp %\*/
+        if (!winJavaMatcher.find()) {
+            throw new GradleException('startScripts: java invocation line not found or unexpected format in windows script')
+        }
+        def winJavaNew = '"%JAVA_EXE%" %DEFAULT_JVM_OPTS% %JAVA_OPTS% %PROMPT_BUTLER_OPTS% --module-path "%JAVAFX_MODULE_PATH%" --add-modules javafx.controls,javafx.graphics,javafx.base -classpath "%CLASSPATH%" com.viruchith.PromptButler.PromptButlerApp %*'
+        ws = ws.replaceFirst(
+                /"%JAVA_EXE%" %DEFAULT_JVM_OPTS% %JAVA_OPTS% %PROMPT_BUTLER_OPTS%\s+-classpath "%CLASSPATH%" com\.viruchith\.PromptButler\.PromptButlerApp %\*/,
+                Matcher.quoteReplacement(winJavaNew)
+        )
+        windowsScript.write(ws.replace('\n', '\r\n'))
+
+        // --- Unix ---
+        String us = unixScript.text
+        if (!us.contains('unset JAVA_TOOL_OPTIONS')) {
+            us = us.replace(
+                    'APP_HOME=$( cd "${APP_HOME:-./}.." > /dev/null && pwd -P ) || exit\n\n# Use the maximum available',
+                    'APP_HOME=$( cd "${APP_HOME:-./}.." > /dev/null && pwd -P ) || exit\n\n# Clear UFT JVM hooks (can break OpenJFX Glass)\nunset JAVA_TOOL_OPTIONS 2>/dev/null || :\nunset _JAVA_OPTIONS 2>/dev/null || :\n\n# Use the maximum available'
+            )
+        }
+        def unixCpMatcher = us =~ /(?m)^CLASSPATH=(.*)$/
+        if (!unixCpMatcher.find()) {
+            throw new GradleException('startScripts: CLASSPATH= not found in unix script')
+        }
+        List<String> unixEntries = unixCpMatcher.group(1).split(':').collect { it.trim() }.findAll { !it.isEmpty() }
+        List<String> unixFx = unixEntries.findAll { isPlatformJavafxJar(it) }.sort()
+        List<String> unixRest = unixEntries.findAll { !isJavafxProjectJar(it) }
+        if (unixFx.isEmpty()) {
+            throw new GradleException("startScripts: no platform javafx jars in unix CLASSPATH (entries: ${unixEntries})")
+        }
+        String unixMp = unixFx.join(':')
+        String unixCpNew = unixRest.join(':')
+        us = us.replaceFirst(/(?m)^CLASSPATH=.*$/,
+                Matcher.quoteReplacement("JAVAFX_MODULE_PATH=${unixMp}\nCLASSPATH=${unixCpNew}"))
+        us = us.replace(
+                '''set -- \
+        -classpath "$CLASSPATH" \
+''',
+                '''set -- \
+        --module-path "$JAVAFX_MODULE_PATH" \
+        --add-modules javafx.controls,javafx.graphics,javafx.base \
+        -classpath "$CLASSPATH" \
+'''
+        )
+        if (!us.contains('JAVAFX_MODULE_PATH=$( cygpath')) {
+            us = us.replace(
+                    '    CLASSPATH=$( cygpath --path --mixed "$CLASSPATH" )',
+                    '    CLASSPATH=$( cygpath --path --mixed "$CLASSPATH" )\n    JAVAFX_MODULE_PATH=$( cygpath --path --mixed "$JAVAFX_MODULE_PATH" )'
+            )
+        }
+        unixScript.text = us
     }
 }
 
