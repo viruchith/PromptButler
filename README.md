@@ -160,6 +160,8 @@ After **`installDist`**, scripts and runtime layout are under:
 - **Windows:** `build\install\prompt-butler\bin\prompt-butler.bat`
 - **Unix / macOS:** `build/install/prompt-butler/bin/prompt-butler`
 
+If you use **Micro Focus UFT** (or any tool that sets `JAVA_TOOL_OPTIONS` / `_JAVA_OPTIONS`), rebuild after pulling changes so the scripts clear those variables before Java starts. If the app still fails to start, see [Troubleshooting](#troubleshooting).
+
 Copy that folder to another machine with the **same OS family** and a **JRE 17+** on `PATH`, or ship it inside an installer you create (see [Publishing](#publishing-and-distribution)).
 
 ---
@@ -233,7 +235,7 @@ Third-party runtime components (OpenJFX, Gson, jNativeHook, Ikonli, etc.) are li
 
 ## Troubleshooting
 
-- **Micro Focus UFT / `JAVA_TOOL_OPTIONS`:** The `run` task strips `JAVA_TOOL_OPTIONS` and `_JAVA_OPTIONS` from the **application** process. `applicationDefaultJvmArgs` includes `--add-exports` / `--add-opens` for Glass as a safety net if you launch without Gradle.
+- **Micro Focus UFT / `JAVA_TOOL_OPTIONS`:** The **`run`** task strips `JAVA_TOOL_OPTIONS` and `_JAVA_OPTIONS` from the **application** process (unless `-PkeepUftJvmHooks=true`). **`installDist`** rewrites **`prompt-butler.bat` / `prompt-butler`** so OpenJFX platform JARs are on **`--module-path`** with **`--add-modules`** (OpenJFX 11+ does not reliably start from a flat classpath alone), **`applicationDefaultJvmArgs`** Glass **`--add-exports` / `--add-opens`** apply there, and the scripts **clear** those env vars before **`java`**. Re-run **`./gradlew installDist`** after dependency or script changes. If hooks persist in your shell, clear them manually: `set JAVA_TOOL_OPTIONS=` and `set _JAVA_OPTIONS=` in `cmd` / PowerShell before starting the app.
 - **Global hotkey (jnativehook):** Some corporate machines block low-level hooks; use the window and toolbar if registration fails (errors are logged).
 - **JavaFX / transparent window issues:** See **`PROJECT_STATE_CHECKPOINT.md`** for mitigations (deferred clipboard, click resolution, etc.).
 
