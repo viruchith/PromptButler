@@ -2,6 +2,7 @@
 /.gradle/
 /build/
 /out/
+/gradle-tmp/
 
 # IDE — IntelliJ / Android Studio
 /.idea/
@@ -47,5 +48,3 @@ local.properties
 # Merge / patch
 *.orig
 *.rej
-
-PROJECT_STATE_CHECKPOINT.md
