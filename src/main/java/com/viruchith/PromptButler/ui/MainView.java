@@ -104,7 +104,7 @@ public final class MainView extends VBox {
     private Stage aboutStage;
 
     private PromptTemplate variableTarget;
-    private final List<TextField> variableFields = new ArrayList<TextField>();
+    private final List<TextArea> variableFields = new ArrayList<TextArea>();
 
     public MainView(
             Stage stage,
@@ -641,10 +641,14 @@ public final class MainView extends VBox {
         formRoot.setPadding(new Insets(12));
         for (String v : vars) {
             Label l = new Label(v);
-            TextField tf = new TextField();
-            tf.setUserData(v);
-            variableFields.add(tf);
-            formRoot.getChildren().add(new VBox(2, l, tf));
+            TextArea ta = new TextArea();
+            ta.setUserData(v);
+            ta.setWrapText(true);
+            ta.setPrefRowCount(3);
+            ta.setPromptText("Value for {{" + v + "}}");
+            ta.setTooltip(new Tooltip("Shortcut+Enter: next variable; on the last, same as Copy & close. (Ctrl on Windows/Linux, Cmd on macOS)"));
+            variableFields.add(ta);
+            formRoot.getChildren().add(new VBox(2, l, ta));
         }
         Button done = new Button("Copy & close");
         done.setGraphic(UiIcons.solid(FontAwesomeSolid.CHECK));
@@ -669,7 +673,7 @@ public final class MainView extends VBox {
         w.initModality(Modality.NONE);
         w.setTitle("Variables — " + t.getTitle());
 
-        Scene scene = new Scene(formRoot, 440, Math.min(520, 120 + vars.size() * 56));
+        Scene scene = new Scene(formRoot, 440, Math.min(720, 140 + vars.size() * 100));
         copyApplicationStylesheetsTo(scene);
         scene.addEventFilter(KeyEvent.KEY_PRESSED, ev -> {
             if (ev.getCode() == KeyCode.ESCAPE) {
@@ -699,12 +703,15 @@ public final class MainView extends VBox {
     private void wireVariableEnter() {
         for (int i = 0; i < variableFields.size(); i++) {
             final int idx = i;
-            TextField tf = variableFields.get(i);
-            tf.setOnAction(e -> {
-                if (idx == variableFields.size() - 1) {
-                    commitVariables();
-                } else {
-                    variableFields.get(idx + 1).requestFocus();
+            TextArea ta = variableFields.get(i);
+            ta.addEventFilter(KeyEvent.KEY_PRESSED, ev -> {
+                if (ev.getCode() == KeyCode.ENTER && ev.isShortcutDown()) {
+                    ev.consume();
+                    if (idx == variableFields.size() - 1) {
+                        commitVariables();
+                    } else {
+                        variableFields.get(idx + 1).requestFocus();
+                    }
                 }
             });
         }
@@ -726,9 +733,9 @@ public final class MainView extends VBox {
             return null;
         }
         LinkedHashMap<String, String> values = new LinkedHashMap<String, String>();
-        for (TextField tf : variableFields) {
-            String key = (String) tf.getUserData();
-            values.put(key, InputText.trimToEmpty(tf.getText()));
+        for (TextArea ta : variableFields) {
+            String key = (String) ta.getUserData();
+            values.put(key, InputText.trimToEmpty(ta.getText()));
         }
         return viewModel.compile(variableTarget, values);
     }

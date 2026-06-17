@@ -9,6 +9,8 @@ import java.util.regex.Pattern;
 
 /**
  * Substitutes {@code {{name}}} placeholders using the provided map (missing keys become empty strings).
+ * Each substituted value is wrapped in ASCII double quotes for the compiled result, with {@code \}
+ * and {@code "} escaped inside the value so the output stays unambiguous.
  */
 public final class TemplateCompiler {
 
@@ -21,10 +23,32 @@ public final class TemplateCompiler {
         StringBuffer sb = new StringBuffer();
         while (m.find()) {
             String key = m.group(1);
-            String replacement = values.containsKey(key) ? InputText.trimToEmpty(values.get(key)) : "";
+            String raw = values.containsKey(key) ? values.get(key) : "";
+            String replacement = quoteEnclosedValue(InputText.trimToEmpty(raw));
             m.appendReplacement(sb, Matcher.quoteReplacement(replacement));
         }
         m.appendTail(sb);
         return sb.toString();
+    }
+
+    /**
+     * Wraps {@code raw} in a pair of {@code "} characters and escapes {@code \} and {@code "} inside {@code raw}.
+     */
+    static String quoteEnclosedValue(String raw) {
+        String s = raw == null ? "" : raw;
+        StringBuilder out = new StringBuilder(s.length() + 2);
+        out.append('"');
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (c == '\\') {
+                out.append("\\\\");
+            } else if (c == '"') {
+                out.append("\\\"");
+            } else {
+                out.append(c);
+            }
+        }
+        out.append('"');
+        return out.toString();
     }
 }
