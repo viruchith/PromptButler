@@ -2,6 +2,7 @@ package com.viruchith.PromptButler.ui;
 
 import com.viruchith.PromptButler.core.model.PromptTemplate;
 import com.viruchith.PromptButler.core.repository.PromptRepository;
+import com.viruchith.PromptButler.core.util.InputText;
 import com.viruchith.PromptButler.core.service.FuzzySearchService;
 import com.viruchith.PromptButler.core.service.TemplateCompiler;
 import com.viruchith.PromptButler.core.service.VariableParser;
@@ -65,7 +66,7 @@ public final class MainViewModel {
     }
 
     public void refreshFilter() {
-        String q = searchText.get();
+        String q = InputText.trimToEmpty(searchText.get());
         List<PromptTemplate> ranked = fuzzySearchService.rank(q, new ArrayList<PromptTemplate>(masterList));
         filteredList.setAll(ranked);
     }
@@ -102,11 +103,12 @@ public final class MainViewModel {
     }
 
     public boolean idExists(String id) {
-        if (id == null) {
+        String needle = InputText.trimToEmpty(id);
+        if (needle.isEmpty()) {
             return false;
         }
         for (PromptTemplate p : masterList) {
-            if (id.equals(p.getId())) {
+            if (needle.equals(p.getId())) {
                 return true;
             }
         }
@@ -142,20 +144,20 @@ public final class MainViewModel {
      * Replaces the template with the same {@code id} (title/body/tags may change). Id must match {@code updated.getId()}.
      */
     public void replaceTemplateById(String id, PromptTemplate updated) throws IOException {
-        Objects.requireNonNull(id, "id");
+        String idNorm = InputText.trimToEmpty(Objects.requireNonNull(id, "id"));
         Objects.requireNonNull(updated, "updated");
-        if (!id.equals(updated.getId())) {
+        if (!idNorm.equals(updated.getId())) {
             throw new IllegalArgumentException("Template id cannot change when editing");
         }
         for (int i = 0; i < masterList.size(); i++) {
-            if (id.equals(masterList.get(i).getId())) {
+            if (idNorm.equals(masterList.get(i).getId())) {
                 masterList.set(i, updated);
                 persist();
                 refreshFilter();
                 return;
             }
         }
-        throw new IllegalArgumentException("No template with id: " + id);
+        throw new IllegalArgumentException("No template with id: " + idNorm);
     }
 
     /**

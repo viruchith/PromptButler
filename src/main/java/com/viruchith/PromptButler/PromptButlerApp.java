@@ -25,6 +25,7 @@ import javafx.geometry.Pos;
 import javafx.scene.Cursor;
 import javafx.scene.Scene;
 import javafx.scene.control.Alert;
+import javafx.scene.image.Image;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.stage.Stage;
@@ -123,6 +124,9 @@ public final class PromptButlerApp extends Application {
         JavaFxClipboardAdapter clipboard = new JavaFxClipboardAdapter();
 
         OverlayStageFactory.applyOverlayChrome(stage, profile);
+        // TRANSPARENT style has no native title bar; taskbar / OS may still use this string.
+        stage.setTitle("Prompt Butler");
+        loadApplicationIcon(stage);
         stage.setMinWidth(320);
         stage.setMinHeight(360);
         stage.setResizable(true);
@@ -141,7 +145,6 @@ public final class PromptButlerApp extends Application {
             scene.getStylesheets().add(css.toExternalForm());
         }
         stage.setScene(scene);
-        stage.setTitle("Prompt Butler");
         stage.setOnCloseRequest(e -> {
             e.consume();
             stage.hide();
@@ -224,6 +227,18 @@ public final class PromptButlerApp extends Application {
             stage.setHeight(nh);
         });
         return grip;
+    }
+
+    private static void loadApplicationIcon(Stage stage) {
+        try (InputStream in = PromptButlerApp.class.getResourceAsStream("/appicon.png")) {
+            if (in == null) {
+                AppLogger.get().warn("Missing classpath resource /appicon.png; window uses default icon.");
+                return;
+            }
+            stage.getIcons().add(new Image(in));
+        } catch (Exception e) {
+            AppLogger.get().warn("Could not load application icon from /appicon.png.", e);
+        }
     }
 
     private static List<PromptTemplate> loadSeedTemplates(BuildProfile profile, JsonSchemaValidator validator)

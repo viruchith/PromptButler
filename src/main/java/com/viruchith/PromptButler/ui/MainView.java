@@ -4,9 +4,12 @@ import com.viruchith.PromptButler.core.clipboard.ClipboardPort;
 import com.viruchith.PromptButler.core.model.PromptTemplate;
 import com.viruchith.PromptButler.core.service.ImportExportService;
 import com.viruchith.PromptButler.core.storage.StoragePaths;
+import com.viruchith.PromptButler.core.util.InputText;
 import javafx.animation.PauseTransition;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
+import javafx.geometry.Pos;
+import javafx.scene.Cursor;
 import javafx.scene.Node;
 import javafx.scene.Scene;
 import javafx.scene.control.Alert;
@@ -20,6 +23,8 @@ import javafx.scene.control.ListView;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
 import javafx.scene.control.Tooltip;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyEvent;
 import javafx.scene.input.MouseButton;
@@ -28,6 +33,7 @@ import javafx.util.Duration;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
+import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.FileChooser;
@@ -39,6 +45,7 @@ import org.kordamp.ikonli.fontawesome5.FontAwesomeSolid;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -60,16 +67,17 @@ public final class MainView extends VBox {
 
     private final TextField searchField = new TextField();
     private final ListView<PromptTemplate> listView = new ListView<PromptTemplate>();
-    private final VBox variablePane = new VBox(6);
     private final VBox listSection = new VBox(6);
     private final HBox toolbar = new HBox(8);
     private final Label statusLabel = new Label("");
+    private final HBox titleBar = new HBox(8);
 
     private PauseTransition singleClickDetailTimer;
     private PromptTemplate pendingSingleClickTemplate;
     private Stage promptDetailStage;
+    /** Modeless window for {{variable}} fill-in; user can keep using the main window. */
+    private Stage variableParamsStage;
 
-    private boolean variableMode;
     private PromptTemplate variableTarget;
     private final List<TextField> variableFields = new ArrayList<TextField>();
 
@@ -86,13 +94,59 @@ public final class MainView extends VBox {
         configureSearch();
         configureList();
         configureToolbar();
+        Label appTitle = new Label("Prompt Butler");
+        appTitle.getStyleClass().add("window-app-title");
+        titleBar.getStyleClass().add("window-drag-region");
+        titleBar.setAlignment(Pos.CENTER_LEFT);
+        ImageView titleIcon = createTitleBarIcon();
+        Region titleDragSpacer = new Region();
+        HBox.setHgrow(titleDragSpacer, Priority.ALWAYS);
+        titleBar.getChildren().addAll(titleIcon, appTitle, titleDragSpacer);
+        titleBar.setCursor(Cursor.MOVE);
+        installUndecoratedStageDrag(titleBar, stage);
         statusLabel.getStyleClass().add("hint-label");
         statusLabel.setMinHeight(18);
-        variablePane.setVisible(false);
-        variablePane.setManaged(false);
         listSection.getChildren().addAll(searchField, listView, toolbar, statusLabel);
-        getChildren().addAll(listSection, variablePane);
+        getChildren().addAll(titleBar, listSection);
+        VBox.setVgrow(listSection, Priority.ALWAYS);
         VBox.setVgrow(listView, Priority.ALWAYS);
+    }
+
+    /**
+     * {@link javafx.stage.StageStyle#TRANSPARENT} removes the native title bar; dragging must be implemented in-scene.
+     */
+    private static ImageView createTitleBarIcon() {
+        ImageView iv = new ImageView();
+        iv.getStyleClass().add("window-app-icon");
+        iv.setFitWidth(22);
+        iv.setFitHeight(22);
+        iv.setPreserveRatio(true);
+        iv.setSmooth(true);
+        iv.setPickOnBounds(true);
+        try (InputStream in = MainView.class.getResourceAsStream("/appicon.png")) {
+            if (in != null) {
+                iv.setImage(new Image(in, 22, 22, true, true));
+            }
+        } catch (Exception ignored) {
+            // leave empty if resource missing or unreadable
+        }
+        return iv;
+    }
+
+    private static void installUndecoratedStageDrag(Node dragHandle, Stage stage) {
+        final double[] offset = new double[2];
+        dragHandle.addEventFilter(MouseEvent.MOUSE_PRESSED, e -> {
+            if (e.getButton() == MouseButton.PRIMARY) {
+                offset[0] = stage.getX() - e.getScreenX();
+                offset[1] = stage.getY() - e.getScreenY();
+            }
+        });
+        dragHandle.addEventFilter(MouseEvent.MOUSE_DRAGGED, e -> {
+            if (e.isPrimaryButtonDown()) {
+                stage.setX(e.getScreenX() + offset[0]);
+                stage.setY(e.getScreenY() + offset[1]);
+            }
+        });
     }
 
     private void configureSearch() {
@@ -106,7 +160,7 @@ public final class MainView extends VBox {
         singleClickDetailTimer.setOnFinished(ev -> {
             PromptTemplate t = pendingSingleClickTemplate;
             pendingSingleClickTemplate = null;
-            if (t == null || variableMode) {
+            if (t == null) {
                 return;
             }
             if (listView.getSelectionModel().getSelectedItem() == t) {
@@ -166,9 +220,6 @@ public final class MainView extends VBox {
         }
         PromptTemplate t = resolveTemplateFromClick(e);
         if (t == null) {
-            return;
-        }
-        if (variableMode) {
             return;
         }
         if (e.getClickCount() == 2) {
@@ -345,16 +396,14 @@ public final class MainView extends VBox {
 
     private void handleKey(KeyEvent event) {
         if (event.getCode() == KeyCode.ESCAPE) {
-            if (variableMode) {
-                leaveVariableMode();
+            if (isVariableParametersWindowOpen()) {
+                closeVariableParametersWindow();
+                focusSearch();
                 event.consume();
                 return;
             }
             hideOverlay();
             event.consume();
-            return;
-        }
-        if (variableMode) {
             return;
         }
         if (searchField.isFocused()) {
@@ -425,32 +474,38 @@ public final class MainView extends VBox {
             copyToClipboardAndHide(t.getBody());
             return;
         }
-        enterVariableMode(t, vars);
+        openVariableParametersWindow(t, vars);
     }
 
-    private void enterVariableMode(PromptTemplate t, List<String> vars) {
-        variableMode = true;
+    private boolean isVariableParametersWindowOpen() {
+        return variableParamsStage != null && variableParamsStage.isShowing();
+    }
+
+    private void openVariableParametersWindow(PromptTemplate t, List<String> vars) {
+        closeVariableParametersWindow();
         variableTarget = t;
-        variablePane.getChildren().clear();
         variableFields.clear();
+
         Label header = new Label("Fill variables for: " + t.getTitle());
-        variablePane.getChildren().add(header);
+        header.setWrapText(true);
+        VBox formRoot = new VBox(6, header);
+        formRoot.getStyleClass().add("app-panel");
+        formRoot.setPadding(new Insets(12));
         for (String v : vars) {
             Label l = new Label(v);
             TextField tf = new TextField();
             tf.setUserData(v);
             variableFields.add(tf);
-            VBox row = new VBox(2, l, tf);
-            variablePane.getChildren().add(row);
+            formRoot.getChildren().add(new VBox(2, l, tf));
         }
         Button done = new Button("Copy & close");
         done.setGraphic(UiIcons.solid(FontAwesomeSolid.CHECK));
-        done.setTooltip(new Tooltip("Fill variables, copy compiled text, and close the overlay."));
+        done.setTooltip(new Tooltip("Fill variables, copy compiled text, and close this variables window (main library stays open)."));
         done.setDefaultButton(true);
         done.setOnAction(e -> commitVariables());
         Button copyKeep = new Button("Copy — keep open");
         copyKeep.setGraphic(UiIcons.solid(FontAwesomeSolid.COPY));
-        copyKeep.setTooltip(new Tooltip("Copy compiled text and keep the window open."));
+        copyKeep.setTooltip(new Tooltip("Copy compiled text and keep this window open."));
         copyKeep.setOnAction(e -> {
             String compiled = compileVariableFormPayload();
             if (compiled != null) {
@@ -458,11 +513,31 @@ public final class MainView extends VBox {
             }
         });
         HBox actions = new HBox(8, copyKeep, done);
-        variablePane.getChildren().add(actions);
-        variablePane.setVisible(true);
-        variablePane.setManaged(true);
-        listSection.setVisible(false);
-        listSection.setManaged(false);
+        formRoot.getChildren().add(actions);
+
+        Stage w = new Stage();
+        variableParamsStage = w;
+        w.initOwner(stage);
+        w.initModality(Modality.NONE);
+        w.setTitle("Variables — " + t.getTitle());
+
+        Scene scene = new Scene(formRoot, 440, Math.min(520, 120 + vars.size() * 56));
+        copyApplicationStylesheetsTo(scene);
+        scene.addEventFilter(KeyEvent.KEY_PRESSED, ev -> {
+            if (ev.getCode() == KeyCode.ESCAPE) {
+                closeVariableParametersWindow();
+                focusSearch();
+                ev.consume();
+            }
+        });
+        w.setScene(scene);
+        w.setOnHidden(e -> {
+            variableParamsStage = null;
+            variableTarget = null;
+            variableFields.clear();
+        });
+        wireVariableEnter();
+        w.show();
         Platform.runLater(new Runnable() {
             @Override
             public void run() {
@@ -471,7 +546,6 @@ public final class MainView extends VBox {
                 }
             }
         });
-        wireVariableEnter();
     }
 
     private void wireVariableEnter() {
@@ -489,37 +563,36 @@ public final class MainView extends VBox {
     }
 
     private void commitVariables() {
-        if (!variableMode || variableTarget == null) {
+        if (variableTarget == null) {
             return;
         }
         String compiled = compileVariableFormPayload();
         if (compiled != null) {
-            copyToClipboardAndHide(compiled);
+            closeVariableParametersWindow();
+            copyPlainTextThenMaybeHide(compiled, false);
         }
     }
 
     private String compileVariableFormPayload() {
-        if (!variableMode || variableTarget == null) {
+        if (variableTarget == null) {
             return null;
         }
         LinkedHashMap<String, String> values = new LinkedHashMap<String, String>();
         for (TextField tf : variableFields) {
             String key = (String) tf.getUserData();
-            values.put(key, tf.getText() == null ? "" : tf.getText());
+            values.put(key, InputText.trimToEmpty(tf.getText()));
         }
         return viewModel.compile(variableTarget, values);
     }
 
-    private void leaveVariableMode() {
-        variableMode = false;
-        variableTarget = null;
-        variablePane.getChildren().clear();
-        variableFields.clear();
-        variablePane.setVisible(false);
-        variablePane.setManaged(false);
-        listSection.setVisible(true);
-        listSection.setManaged(true);
-        focusSearch();
+    private void closeVariableParametersWindow() {
+        if (variableParamsStage != null) {
+            Stage s = variableParamsStage;
+            variableParamsStage = null;
+            variableTarget = null;
+            variableFields.clear();
+            s.close();
+        }
     }
 
     private void copyToClipboardAndHide(String text) {
@@ -563,6 +636,7 @@ public final class MainView extends VBox {
 
     private void hideOverlay() {
         closePromptDetailWindow();
+        closeVariableParametersWindow();
         stage.hide();
         clipboard.clearRetainedSensitiveData();
     }
@@ -786,7 +860,7 @@ public final class MainView extends VBox {
         okButton.addEventFilter(javafx.event.ActionEvent.ACTION, new javafx.event.EventHandler<javafx.event.ActionEvent>() {
             @Override
             public void handle(javafx.event.ActionEvent evt) {
-                String title = titleField.getText() == null ? "" : titleField.getText().trim();
+                String title = InputText.trimToEmpty(titleField.getText());
                 if (title.isEmpty()) {
                     showError("Validation", "Title is required.");
                     evt.consume();
@@ -798,8 +872,8 @@ public final class MainView extends VBox {
         if (!result.isPresent() || result.get() != ButtonType.OK) {
             return;
         }
-        String title = titleField.getText().trim();
-        String body = bodyArea.getText() == null ? "" : bodyArea.getText();
+        String title = InputText.trimToEmpty(titleField.getText());
+        String body = InputText.trimToEmpty(bodyArea.getText());
         try {
             PromptTemplate saved;
             if (isEdit) {
@@ -843,11 +917,12 @@ public final class MainView extends VBox {
 
     private static List<String> parseTags(String raw) {
         ArrayList<String> out = new ArrayList<String>();
-        if (raw == null) {
+        String trimmed = InputText.trimToEmpty(raw);
+        if (trimmed.isEmpty()) {
             return out;
         }
-        for (String part : raw.split(",")) {
-            String s = part.trim();
+        for (String part : trimmed.split(",")) {
+            String s = InputText.trimToEmpty(part);
             if (!s.isEmpty()) {
                 out.add(s);
             }

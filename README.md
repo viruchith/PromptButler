@@ -47,7 +47,8 @@ For maintainers and deep technical context (architecture, UFT/Java agents, UI fl
 ### 1. Open the overlay
 
 - Press **Ctrl+Alt+P** (Windows/Linux) or **Cmd+Alt+P** (macOS), **or** use the tray icon if you enabled tray auto-hide in `preferences.json`.
-- The window is an **always-on-top** card: search box at the top, list of prompts below, toolbar at the bottom.
+- The window is an **always-on-top** card: **Prompt Butler** title strip, search box, list of prompts, toolbar at the bottom.
+- **Move the window:** drag anywhere on the **Prompt Butler** title strip at the top (there is no native title bar because the overlay uses a transparent frame).
 
 ### 2. Find a prompt
 
@@ -61,7 +62,7 @@ For maintainers and deep technical context (architecture, UFT/Java agents, UI fl
 | Copy the **raw template body** (placeholders **not** filled) | Click the **Copy** icon on the row, **or** select the row and press **Ctrl+C** (list focused, not the search field). The overlay stays open; a short “Copied” status appears. |
 | Open read-only **details** (id, full text, actions) | **Single-click** the row (not on the row’s Copy icon). A small modal opens: **Copy**, **Edit**, **Delete**, **Close**. |
 
-### 4. Use a prompt with `{{variables}}` (inline form)
+### 4. Use a prompt with `{{variables}}` (separate window)
 
 Templates can include placeholders like `{{language}}` or `{{role}}` in the **`body`** (names: letters, digits, `_`, `-` only).
 
@@ -76,10 +77,10 @@ Act as an expert {{language}} developer and refactor the following code with {{s
 **Steps:**
 
 1. **Double-click** the prompt in the list, **or** select it and press **Enter** (with list focus, not inside the search field).
-2. The list is replaced by an **inline form**: one **text field per variable** (`language`, `style`, `code_block` in the example above).
+2. A **separate modeless window** opens: one **text field per variable** (`language`, `style`, `code_block` in the example above). The **main overlay stays visible** so you can search and browse prompts while the form is open.
 3. Fill the fields. Press **Enter** to jump to the next field; on the **last** field, **Enter** acts like **Copy & close**.
-4. Click **Copy & close** to put the **fully expanded** text on the clipboard and hide the overlay, **or** **Copy — keep open** to copy and leave the window visible.
-5. Paste into your editor, browser, or chat. Press **Escape** to cancel variable mode and return to the list (or hide the overlay, depending on focus).
+4. Click **Copy & close** to put the **fully expanded** text on the clipboard and close the variables window (**the main overlay stays open**), **or** **Copy — keep open** to copy and leave the variables window open.
+5. Paste into your editor, browser, or chat. Press **Escape** while the variables window is focused to close it without copying; **Escape** on the main overlay still hides the overlay when the variables window is not open.
 
 ### 5. Use a prompt with **no** variables (fast paste)
 
