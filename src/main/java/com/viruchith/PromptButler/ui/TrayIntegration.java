@@ -4,8 +4,10 @@ import com.viruchith.PromptButler.core.logging.AppLogger;
 import javafx.application.Platform;
 import javafx.stage.Stage;
 
+import javax.imageio.ImageIO;
 import java.awt.*;
 import java.awt.image.BufferedImage;
+import java.io.InputStream;
 import java.util.Objects;
 
 /**
@@ -53,7 +55,7 @@ public final class TrayIntegration {
             });
             menu.add(open);
             menu.add(exit);
-            Image image = new BufferedImage(16, 16, BufferedImage.TYPE_INT_ARGB);
+            Image image = loadTrayImageOrBlank();
             trayIcon = new TrayIcon(image, "Prompt Butler", menu);
             trayIcon.setImageAutoSize(true);
             trayIcon.addActionListener(new java.awt.event.ActionListener() {
@@ -84,5 +86,30 @@ public final class TrayIntegration {
         } catch (Exception ignored) {
         }
         trayIcon = null;
+    }
+
+    private static Image loadTrayImageOrBlank() {
+        try (InputStream in = TrayIntegration.class.getResourceAsStream("/appicon.png")) {
+            if (in == null) {
+                return new BufferedImage(16, 16, BufferedImage.TYPE_INT_ARGB);
+            }
+            BufferedImage src = ImageIO.read(in);
+            if (src == null) {
+                return new BufferedImage(16, 16, BufferedImage.TYPE_INT_ARGB);
+            }
+            int size = 22;
+            BufferedImage out = new BufferedImage(size, size, BufferedImage.TYPE_INT_ARGB);
+            Graphics2D g = out.createGraphics();
+            try {
+                g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+                g.drawImage(src, 0, 0, size, size, null);
+            } finally {
+                g.dispose();
+            }
+            return out;
+        } catch (Exception e) {
+            AppLogger.get().warn("Could not load /appicon.png for tray; using blank icon.", e);
+            return new BufferedImage(16, 16, BufferedImage.TYPE_INT_ARGB);
+        }
     }
 }

@@ -23,6 +23,8 @@ import javafx.scene.control.ListView;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
 import javafx.scene.control.Tooltip;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyEvent;
 import javafx.scene.input.MouseButton;
@@ -43,6 +45,7 @@ import org.kordamp.ikonli.fontawesome5.FontAwesomeSolid;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -95,9 +98,10 @@ public final class MainView extends VBox {
         appTitle.getStyleClass().add("window-app-title");
         titleBar.getStyleClass().add("window-drag-region");
         titleBar.setAlignment(Pos.CENTER_LEFT);
+        ImageView titleIcon = createTitleBarIcon();
         Region titleDragSpacer = new Region();
         HBox.setHgrow(titleDragSpacer, Priority.ALWAYS);
-        titleBar.getChildren().addAll(appTitle, titleDragSpacer);
+        titleBar.getChildren().addAll(titleIcon, appTitle, titleDragSpacer);
         titleBar.setCursor(Cursor.MOVE);
         installUndecoratedStageDrag(titleBar, stage);
         statusLabel.getStyleClass().add("hint-label");
@@ -111,6 +115,24 @@ public final class MainView extends VBox {
     /**
      * {@link javafx.stage.StageStyle#TRANSPARENT} removes the native title bar; dragging must be implemented in-scene.
      */
+    private static ImageView createTitleBarIcon() {
+        ImageView iv = new ImageView();
+        iv.getStyleClass().add("window-app-icon");
+        iv.setFitWidth(22);
+        iv.setFitHeight(22);
+        iv.setPreserveRatio(true);
+        iv.setSmooth(true);
+        iv.setPickOnBounds(true);
+        try (InputStream in = MainView.class.getResourceAsStream("/appicon.png")) {
+            if (in != null) {
+                iv.setImage(new Image(in, 22, 22, true, true));
+            }
+        } catch (Exception ignored) {
+            // leave empty if resource missing or unreadable
+        }
+        return iv;
+    }
+
     private static void installUndecoratedStageDrag(Node dragHandle, Stage stage) {
         final double[] offset = new double[2];
         dragHandle.addEventFilter(MouseEvent.MOUSE_PRESSED, e -> {
