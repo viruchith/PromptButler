@@ -162,6 +162,12 @@
     -fx-padding: 0 8 0 0;
 }
 
+.title-bar-help-button {
+    -fx-padding: 4 8 4 8;
+    -fx-min-width: 2em;
+    -fx-min-height: 2em;
+}
+
 .preview-label {
     -fx-text-fill: #374151;
     -fx-font-size: 11px;
