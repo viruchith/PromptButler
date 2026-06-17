@@ -14,9 +14,12 @@ For maintainers and deep technical context (architecture, UFT/Java agents, UI fl
 
 ---
 
+**Version:** `0.2.0-SNAPSHOT` (see `build.gradle` → `version`).
+
 ## Table of contents
 
 - [What you can do with Prompt Butler](#what-you-can-do-with-prompt-butler)
+- [How to use](#how-to-use)
 - [Quick start (run from source)](#quick-start-run-from-source)
 - [Build from source](#build-from-source)
 - [Tests and coverage](#tests-and-coverage)
@@ -36,6 +39,79 @@ For maintainers and deep technical context (architecture, UFT/Java agents, UI fl
 | **Import / export** | JSON library for backup, sharing, or migration (import reassigns UUID ids). |
 | **Tray & auto-hide** | Optional system tray and defocus/minimize behaviors (see `preferences.json`). |
 | **Data folder** | Toolbar **Data** sets where `prompts.json` / `preferences.json` live (pointer under `~/PromptButler/`; restart to apply). |
+
+---
+
+## How to use
+
+### 1. Open the overlay
+
+- Press **Ctrl+Alt+P** (Windows/Linux) or **Cmd+Alt+P** (macOS), **or** use the tray icon if you enabled tray auto-hide in `preferences.json`.
+- The window is an **always-on-top** card: search box at the top, list of prompts below, toolbar at the bottom.
+
+### 2. Find a prompt
+
+- Type in the **search** box; matching is **fuzzy** on **title** and **tags** (e.g. typing `refac` can surface *Refactor assistant*).
+- Use **↑** / **↓** while the **list** is focused to move the selection (click the list first if focus is in the search field).
+
+### 3. Copy without opening the variable form
+
+| Goal | What to do |
+|------|------------|
+| Copy the **raw template body** (placeholders **not** filled) | Click the **Copy** icon on the row, **or** select the row and press **Ctrl+C** (list focused, not the search field). The overlay stays open; a short “Copied” status appears. |
+| Open read-only **details** (id, full text, actions) | **Single-click** the row (not on the row’s Copy icon). A small modal opens: **Copy**, **Edit**, **Delete**, **Close**. |
+
+### 4. Use a prompt with `{{variables}}` (inline form)
+
+Templates can include placeholders like `{{language}}` or `{{role}}` in the **`body`** (names: letters, digits, `_`, `-` only).
+
+**Example** (similar to the bundled *Refactor assistant* template):
+
+```text
+Act as an expert {{language}} developer and refactor the following code with {{style}} conventions:
+
+{{code_block}}
+```
+
+**Steps:**
+
+1. **Double-click** the prompt in the list, **or** select it and press **Enter** (with list focus, not inside the search field).
+2. The list is replaced by an **inline form**: one **text field per variable** (`language`, `style`, `code_block` in the example above).
+3. Fill the fields. Press **Enter** to jump to the next field; on the **last** field, **Enter** acts like **Copy & close**.
+4. Click **Copy & close** to put the **fully expanded** text on the clipboard and hide the overlay, **or** **Copy — keep open** to copy and leave the window visible.
+5. Paste into your editor, browser, or chat. Press **Escape** to cancel variable mode and return to the list (or hide the overlay, depending on focus).
+
+### 5. Use a prompt with **no** variables (fast paste)
+
+If the body has **no** `{{placeholders}}`:
+
+1. **Double-click** or **Enter** on the row.
+2. The **raw body** is copied and the overlay **hides** automatically (after a short internal delay so the gesture finishes safely).
+
+### 6. Toolbar actions
+
+| Button | Use it to… |
+|--------|------------|
+| **New** | Create a template (title, body, tags). **Id** is a new **UUID** automatically. |
+| **Import** | Replace the whole library from a JSON file (existing ids in the file are **reassigned** on import). |
+| **Export** | Save all templates to a JSON file for backup or sharing. |
+| **Data** | Change where `prompts.json` / `preferences.json` are stored (writes a pointer under `~/PromptButler/`; **restart** the app to apply). |
+| **Quit** | Exit the application. |
+
+### 7. Example: add your own snippet via JSON
+
+After running once, edit **`prompts.json`** in your [data directory](#configuration-and-data-files) (or use **New** in the UI). Each template looks like:
+
+```json
+{
+  "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+  "title": "Commit message",
+  "body": "Write a concise Git commit message for the following diff.\n\nRepository context: {{repo}}\n\nDiff:\n{{diff}}",
+  "tags": ["git", "commit"]
+}
+```
+
+Use a **new UUID** for `id` when adding by hand (or use **New** in the app so the id is generated for you). The app **does not watch** `prompts.json` for live edits—**restart Prompt Butler** after manual changes so the library reloads from disk.
 
 ---
 
