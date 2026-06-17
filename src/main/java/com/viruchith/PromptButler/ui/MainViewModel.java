@@ -99,6 +99,10 @@ public final class MainViewModel {
         return variableParser.parseOrderedUniqueVariables(t.getBody());
     }
 
+    /**
+     * Compiles {@code t.getBody()} with the given variable values; each substituted value appears wrapped in
+     * ASCII double quotes (with {@code \} and {@code "} escaped) in the result string.
+     */
     public String compile(PromptTemplate t, Map<String, String> values) {
         return templateCompiler.compile(t.getBody(), values);
     }

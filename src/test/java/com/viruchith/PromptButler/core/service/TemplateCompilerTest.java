@@ -14,7 +14,7 @@ class TemplateCompilerTest {
         String body = "Hello {{name}} ({{name}})";
         java.util.HashMap<String, String> m = new java.util.HashMap<String, String>();
         m.put("name", "Ada");
-        assertEquals("Hello Ada (Ada)", compiler.compile(body, m));
+        assertEquals("Hello \"Ada\" (\"Ada\")", compiler.compile(body, m));
     }
 
     @Test
@@ -22,7 +22,15 @@ class TemplateCompilerTest {
         String body = "{{a}}-{{b}}";
         java.util.HashMap<String, String> m = new java.util.HashMap<String, String>();
         m.put("a", "1");
-        assertEquals("1-", compiler.compile(body, m));
+        assertEquals("\"1\"-\"\"", compiler.compile(body, m));
+    }
+
+    @Test
+    void escapesQuotesAndBackslashesInValues() {
+        String body = "x={{p}}";
+        java.util.HashMap<String, String> m = new java.util.HashMap<String, String>();
+        m.put("p", "say \"hi\"\\");
+        assertEquals("x=\"say \\\"hi\\\"\\\\\"", compiler.compile(body, m));
     }
 
     @Test

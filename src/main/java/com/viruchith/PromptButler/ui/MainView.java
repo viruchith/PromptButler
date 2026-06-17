@@ -19,6 +19,7 @@ import javafx.scene.control.Button;
 import javafx.scene.control.ButtonType;
 import javafx.scene.control.Dialog;
 import javafx.scene.control.DialogPane;
+import javafx.scene.control.Hyperlink;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
@@ -45,9 +46,11 @@ import javafx.util.Callback;
 
 import org.kordamp.ikonli.fontawesome5.FontAwesomeSolid;
 
+import java.awt.Desktop;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URI;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -65,7 +68,7 @@ import java.util.Optional;
  * </p>
  * <ul>
  *   <li><b>Title strip</b> — app icon, “Prompt Butler” label, full-width drag handle (no OS title bar under
- *       {@link javafx.stage.StageStyle#TRANSPARENT})</li>
+ *       {@link javafx.stage.StageStyle#TRANSPARENT}), help ({@code ?}) opening an About window</li>
  *   <li><b>List</b> — fuzzy-filtered items from {@link MainViewModel#getFilteredList()}; single-click detail timer;
  *       double-click / Enter runs {@link #onTemplateChosen(com.viruchith.PromptButler.core.model.PromptTemplate)}</li>
  *   <li><b>Variables</b> — separate modeless window; copy paths use {@link #copyPlainTextThenMaybeHide(String, boolean)}
@@ -97,8 +100,11 @@ public final class MainView extends VBox {
     /** Modeless window for {{variable}} fill-in; user can keep using the main window. */
     private Stage variableParamsStage;
 
+    /** About / help window (single instance while open). */
+    private Stage aboutStage;
+
     private PromptTemplate variableTarget;
-    private final List<TextField> variableFields = new ArrayList<TextField>();
+    private final List<TextArea> variableFields = new ArrayList<TextArea>();
 
     public MainView(
             Stage stage,
@@ -120,7 +126,17 @@ public final class MainView extends VBox {
         ImageView titleIcon = createTitleBarIcon();
         Region titleDragSpacer = new Region();
         HBox.setHgrow(titleDragSpacer, Priority.ALWAYS);
-        titleBar.getChildren().addAll(titleIcon, appTitle, titleDragSpacer);
+        Button helpAbout = new Button();
+        helpAbout.setGraphic(UiIcons.solid(FontAwesomeSolid.QUESTION_CIRCLE));
+        helpAbout.getStyleClass().addAll("icon-toolbar-button", "title-bar-help-button", "title-bar-no-drag");
+        helpAbout.setFocusTraversable(false);
+        helpAbout.setCursor(Cursor.DEFAULT);
+        helpAbout.setTooltip(new Tooltip("About Prompt Butler — license and links."));
+        helpAbout.setOnAction(e -> {
+            e.consume();
+            showAboutWindow();
+        });
+        titleBar.getChildren().addAll(titleIcon, appTitle, titleDragSpacer, helpAbout);
         titleBar.setCursor(Cursor.MOVE);
         installUndecoratedStageDrag(titleBar, stage);
         statusLabel.getStyleClass().add("hint-label");
@@ -162,17 +178,112 @@ public final class MainView extends VBox {
     private static void installUndecoratedStageDrag(Node dragHandle, Stage stage) {
         final double[] offset = new double[2];
         dragHandle.addEventFilter(MouseEvent.MOUSE_PRESSED, e -> {
+            if (isUnderNoDragTitleControl(e.getTarget())) {
+                return;
+            }
             if (e.getButton() == MouseButton.PRIMARY) {
                 offset[0] = stage.getX() - e.getScreenX();
                 offset[1] = stage.getY() - e.getScreenY();
             }
         });
         dragHandle.addEventFilter(MouseEvent.MOUSE_DRAGGED, e -> {
+            if (isUnderNoDragTitleControl(e.getTarget())) {
+                return;
+            }
             if (e.isPrimaryButtonDown()) {
                 stage.setX(e.getScreenX() + offset[0]);
                 stage.setY(e.getScreenY() + offset[1]);
             }
         });
+    }
+
+    /**
+     * Nodes marked {@code title-bar-no-drag} (and their descendants) must not move the undecorated stage.
+     */
+    private static boolean isUnderNoDragTitleControl(Object eventTarget) {
+        if (!(eventTarget instanceof Node)) {
+            return false;
+        }
+        for (Node n = (Node) eventTarget; n != null; n = n.getParent()) {
+            if (n.getStyleClass().contains("title-bar-no-drag")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static final String ABOUT_GITHUB_URL = "https://github.com/viruchith/PromptButler";
+
+    private void showAboutWindow() {
+        if (aboutStage != null && aboutStage.isShowing()) {
+            aboutStage.toFront();
+            return;
+        }
+        Stage w = new Stage();
+        aboutStage = w;
+        w.initOwner(stage);
+        w.initModality(Modality.WINDOW_MODAL);
+        w.setTitle("About Prompt Butler");
+
+        Label heading = new Label("Prompt Butler");
+        heading.getStyleClass().add("window-app-title");
+
+        String implVer = MainView.class.getPackage() != null
+                ? MainView.class.getPackage().getImplementationVersion()
+                : null;
+        String versionLine = (implVer == null || implVer.isEmpty()) ? "0.2.0-SNAPSHOT" : implVer;
+        Label version = new Label("Version " + versionLine);
+        version.getStyleClass().add("preview-label");
+
+        Label author = new Label("Author: Viruchith Ganesan");
+
+        Hyperlink repo = new Hyperlink(ABOUT_GITHUB_URL);
+        repo.setWrapText(true);
+        repo.setOnAction(ev -> openExternalUri(ABOUT_GITHUB_URL));
+
+        Label copyright = new Label("Copyright \u00a9 2026 Viruchith Ganesan");
+
+        String licenseBody = "Licensed under the GNU General Public License v3.0 only (GPL-3.0-only). "
+                + "You may redistribute and modify this program under those terms. "
+                + "This is free software; there is NO WARRANTY, to the extent permitted by law. "
+                + "See the LICENSE file in the repository for the full license text.";
+        TextArea licenseArea = new TextArea(licenseBody);
+        licenseArea.setEditable(false);
+        licenseArea.setWrapText(true);
+        licenseArea.setPrefRowCount(5);
+        licenseArea.setMaxHeight(140);
+        VBox.setVgrow(licenseArea, Priority.NEVER);
+
+        Button closeB = new Button("Close");
+        styleToolbarButton(closeB, FontAwesomeSolid.TIMES, "Close this window.");
+        closeB.setOnAction(e -> w.close());
+
+        VBox root = new VBox(10, heading, version, author, repo, copyright, licenseArea, closeB);
+        root.getStyleClass().add("app-panel");
+        root.setPadding(new Insets(12));
+
+        Scene scene = new Scene(root, 420, 420);
+        copyApplicationStylesheetsTo(scene);
+        scene.addEventFilter(KeyEvent.KEY_PRESSED, ev -> {
+            if (ev.getCode() == KeyCode.ESCAPE) {
+                w.close();
+                ev.consume();
+            }
+        });
+        w.setScene(scene);
+        w.setOnHidden(e -> aboutStage = null);
+        w.show();
+    }
+
+    private static void openExternalUri(String uriString) {
+        try {
+            URI uri = URI.create(uriString);
+            if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
+                Desktop.getDesktop().browse(uri);
+            }
+        } catch (Exception ignored) {
+            // best-effort only
+        }
     }
 
     /* ----- Search field: bidirectional bind to view model (trim applied when filtering) ----- */
@@ -530,10 +641,14 @@ public final class MainView extends VBox {
         formRoot.setPadding(new Insets(12));
         for (String v : vars) {
             Label l = new Label(v);
-            TextField tf = new TextField();
-            tf.setUserData(v);
-            variableFields.add(tf);
-            formRoot.getChildren().add(new VBox(2, l, tf));
+            TextArea ta = new TextArea();
+            ta.setUserData(v);
+            ta.setWrapText(true);
+            ta.setPrefRowCount(3);
+            ta.setPromptText("Value for {{" + v + "}}");
+            ta.setTooltip(new Tooltip("Shortcut+Enter: next variable; on the last, same as Copy & close. (Ctrl on Windows/Linux, Cmd on macOS)"));
+            variableFields.add(ta);
+            formRoot.getChildren().add(new VBox(2, l, ta));
         }
         Button done = new Button("Copy & close");
         done.setGraphic(UiIcons.solid(FontAwesomeSolid.CHECK));
@@ -558,7 +673,7 @@ public final class MainView extends VBox {
         w.initModality(Modality.NONE);
         w.setTitle("Variables — " + t.getTitle());
 
-        Scene scene = new Scene(formRoot, 440, Math.min(520, 120 + vars.size() * 56));
+        Scene scene = new Scene(formRoot, 440, Math.min(720, 140 + vars.size() * 100));
         copyApplicationStylesheetsTo(scene);
         scene.addEventFilter(KeyEvent.KEY_PRESSED, ev -> {
             if (ev.getCode() == KeyCode.ESCAPE) {
@@ -588,12 +703,15 @@ public final class MainView extends VBox {
     private void wireVariableEnter() {
         for (int i = 0; i < variableFields.size(); i++) {
             final int idx = i;
-            TextField tf = variableFields.get(i);
-            tf.setOnAction(e -> {
-                if (idx == variableFields.size() - 1) {
-                    commitVariables();
-                } else {
-                    variableFields.get(idx + 1).requestFocus();
+            TextArea ta = variableFields.get(i);
+            ta.addEventFilter(KeyEvent.KEY_PRESSED, ev -> {
+                if (ev.getCode() == KeyCode.ENTER && ev.isShortcutDown()) {
+                    ev.consume();
+                    if (idx == variableFields.size() - 1) {
+                        commitVariables();
+                    } else {
+                        variableFields.get(idx + 1).requestFocus();
+                    }
                 }
             });
         }
@@ -615,9 +733,9 @@ public final class MainView extends VBox {
             return null;
         }
         LinkedHashMap<String, String> values = new LinkedHashMap<String, String>();
-        for (TextField tf : variableFields) {
-            String key = (String) tf.getUserData();
-            values.put(key, InputText.trimToEmpty(tf.getText()));
+        for (TextArea ta : variableFields) {
+            String key = (String) ta.getUserData();
+            values.put(key, InputText.trimToEmpty(ta.getText()));
         }
         return viewModel.compile(variableTarget, values);
     }
