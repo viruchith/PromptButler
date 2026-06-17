@@ -138,9 +138,18 @@
     -fx-padding: 2 8 2 8;
     -fx-min-width: 2.5em;
 }
+
+.hint-label {
     -fx-text-fill: #047857;
     -fx-font-size: 11px;
     -fx-padding: 2 0 0 0;
+}
+
+.window-app-title {
+    -fx-font-size: 15px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #0f172a;
+    -fx-padding: 0 0 4 0;
 }
 
 .preview-label {

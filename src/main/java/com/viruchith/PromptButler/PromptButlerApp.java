@@ -123,6 +123,8 @@ public final class PromptButlerApp extends Application {
         JavaFxClipboardAdapter clipboard = new JavaFxClipboardAdapter();
 
         OverlayStageFactory.applyOverlayChrome(stage, profile);
+        // TRANSPARENT style has no native title bar; taskbar / OS may still use this string.
+        stage.setTitle("Prompt Butler");
         stage.setMinWidth(320);
         stage.setMinHeight(360);
         stage.setResizable(true);
@@ -141,7 +143,6 @@ public final class PromptButlerApp extends Application {
             scene.getStylesheets().add(css.toExternalForm());
         }
         stage.setScene(scene);
-        stage.setTitle("Prompt Butler");
         stage.setOnCloseRequest(e -> {
             e.consume();
             stage.hide();

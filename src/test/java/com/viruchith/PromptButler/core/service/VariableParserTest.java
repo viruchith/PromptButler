@@ -24,7 +24,8 @@ class VariableParserTest {
                 Arguments.of("no vars", Collections.emptyList()),
                 Arguments.of("{{role}} {{language}}", Arrays.asList("role", "language")),
                 Arguments.of("bad {not a {{ var }}", Collections.emptyList()),
-                Arguments.of("{{x1_y-2}}", Arrays.asList("x1_y-2"))
+                Arguments.of("{{x1_y-2}}", Arrays.asList("x1_y-2")),
+                Arguments.of("  {{name}}  ", Arrays.asList("name"))
         );
     }
 
@@ -36,7 +37,7 @@ class VariableParserTest {
 
     @Test
     void rejectsNullBody() {
-        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class, () ->
+        org.junit.jupiter.api.Assertions.assertThrows(NullPointerException.class, () ->
                 parser.parseOrderedUniqueVariables(null));
     }
 

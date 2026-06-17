@@ -1,5 +1,7 @@
 package com.viruchith.PromptButler.core.model;
 
+import com.viruchith.PromptButler.core.util.InputText;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -16,13 +18,26 @@ public final class PromptTemplate {
     private final List<String> tags;
 
     public PromptTemplate(String id, String title, String body, List<String> tags) {
-        this.id = Objects.requireNonNull(id, "id");
-        this.title = Objects.requireNonNull(title, "title");
-        this.body = Objects.requireNonNull(body, "body");
+        this.id = InputText.trimToEmpty(Objects.requireNonNull(id, "id"));
+        if (this.id.isEmpty()) {
+            throw new IllegalArgumentException("id cannot be blank");
+        }
+        this.title = InputText.trimToEmpty(Objects.requireNonNull(title, "title"));
+        this.body = InputText.trimToEmpty(Objects.requireNonNull(body, "body"));
         if (tags == null) {
             this.tags = Collections.emptyList();
         } else {
-            this.tags = Collections.unmodifiableList(new ArrayList<String>(tags));
+            ArrayList<String> normalized = new ArrayList<String>();
+            for (String t : tags) {
+                if (t == null) {
+                    continue;
+                }
+                String x = InputText.trimToEmpty(t);
+                if (!x.isEmpty()) {
+                    normalized.add(x);
+                }
+            }
+            this.tags = Collections.unmodifiableList(normalized);
         }
     }
 
