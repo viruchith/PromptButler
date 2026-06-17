@@ -1,0 +1,118 @@
+plugins {
+    id 'java'
+    id 'application'
+    id 'org.openjfx.javafxplugin' version '0.0.14'
+    id 'jacoco'
+}
+
+group = 'com.viruchith.promptbutler'
+version = '0.1.0-SNAPSHOT'
+
+def envProfile = (project.findProperty('env') ?: 'prod').toString().toLowerCase()
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'com.google.code.gson:gson:2.10.1'
+    implementation 'com.github.kwhat:jnativehook:2.2.2'
+    implementation 'org.kordamp.ikonli:ikonli-javafx:12.3.1'
+    implementation 'org.kordamp.ikonli:ikonli-fontawesome5-pack:12.3.1'
+
+    testImplementation platform('org.junit:junit-bom:5.10.2')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testImplementation 'org.mockito:mockito-core:5.11.0'
+    testImplementation 'org.mockito:mockito-junit-jupiter:5.11.0'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+javafx {
+    version = '21.0.6'
+    modules = ['javafx.controls', 'javafx.graphics']
+}
+
+application {
+    mainClass = 'com.viruchith.PromptButler.PromptButlerApp'
+    // Keep all JVM flags here: setting jvmArgs on :run alone can override these defaults (Gradle 8.x).
+    applicationDefaultJvmArgs = [
+            '-Dfile.encoding=UTF-8',
+            // Micro Focus UFT Java Support reflects into Glass; without this, Stage.show() fails with
+            // IllegalAccessError when UFT hooks the JVM (JAVA_TOOL_OPTIONS / _JAVA_OPTIONS).
+            '--add-exports=javafx.graphics/com.sun.glass.ui=ALL-UNNAMED',
+            '--add-opens=javafx.graphics/com.sun.glass.ui=ALL-UNNAMED'
+    ]
+}
+
+compileJava {
+    options.encoding = 'UTF-8'
+    options.compilerArgs += ['-Xlint:deprecation']
+    if (envProfile == 'prod') {
+        options.compilerArgs += ['-Xlint:all']
+    }
+}
+
+tasks.named('run', JavaExec) { JavaExec exec ->
+    systemProperty 'prompt.butler.profile', envProfile
+    // Micro Focus UFT injects via JAVA_TOOL_OPTIONS / _JAVA_OPTIONS; fork the app without those
+    // so JavaFX is not instrumented (avoids Glass IllegalAccessError and "Can't create support object for Scene").
+    def keepUftJvmHooks = (project.findProperty('keepUftJvmHooks')?.toString() == 'true')
+    exec.doFirst {
+        if (!keepUftJvmHooks) {
+            def env = new LinkedHashMap<String, String>(System.getenv())
+            env.remove('JAVA_TOOL_OPTIONS')
+            env.remove('_JAVA_OPTIONS')
+            exec.setEnvironment(env)
+        }
+    }
+}
+
+tasks.named('test', Test) {
+    useJUnitPlatform()
+    systemProperty 'prompt.butler.profile', envProfile
+    jvmArgs '-Djava.awt.headless=true'
+}
+
+jacoco {
+    toolVersion = '0.8.11'
+}
+
+jacocoTestReport {
+    dependsOn test
+    reports {
+        xml.required = true
+        html.required = true
+    }
+}
+
+jacocoTestCoverageVerification {
+    dependsOn test
+    violationRules {
+        rule {
+            element = 'BUNDLE'
+            limit {
+                counter = 'LINE'
+                value = 'COVEREDRATIO'
+                minimum = 0.80
+            }
+        }
+    }
+}
+
+afterEvaluate {
+    def coreTree = fileTree(dir: file("$buildDir/classes/java/main"), includes: ['**/com/viruchith/PromptButler/core/**'])
+    jacocoTestReport {
+        classDirectories.setFrom(files(coreTree))
+    }
+    jacocoTestCoverageVerification {
+        classDirectories.setFrom(files(coreTree))
+    }
+}
+
+check.dependsOn jacocoTestCoverageVerification

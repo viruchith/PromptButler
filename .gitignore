@@ -1,0 +1,51 @@
+# Gradle
+/.gradle/
+/build/
+/out/
+
+# IDE — IntelliJ / Android Studio
+/.idea/
+*.iml
+*.ipr
+*.iws
+
+# IDE — Eclipse / Spring Tool Suite
+/.classpath
+/.project
+/.settings/
+bin/
+
+# IDE — NetBeans
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Logs & JVM crash dumps
+*.log
+hs_err_pid*
+replay_pid*
+
+# Local / secrets (do not commit)
+.env
+.env.*
+local.properties
+
+# Java / JVM diagnostics
+*.hprof
+.attach_pid*
+
+# Tooling metadata (local)
+.cursor/
+
+# Merge / patch
+*.orig
+*.rej
+
+PROJECT_STATE_CHECKPOINT.md

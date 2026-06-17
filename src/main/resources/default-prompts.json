@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "templates": [
+    {
+      "id": "3f8c2a10-5b4d-4e2f-9c1a-0d7e6f5a4b3c",
+      "title": "Welcome / Help",
+      "body": "Prompt Butler: use the search box, arrow keys, Enter to copy. Templates may use variables like {{role}}.",
+      "tags": ["help", "intro"]
+    },
+    {
+      "id": "c7d1e9f0-8a2b-4c6d-9e0f-1a2b3c4d5e6f",
+      "title": "Refactor assistant",
+      "body": "Act as an expert {{language}} developer and refactor the following code with {{style}} conventions:\n\n",
+      "tags": ["code", "refactor"]
+    }
+  ]
+}

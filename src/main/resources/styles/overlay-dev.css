@@ -1,0 +1,164 @@
+/* Dev profile: same light UI + visible debug border on main panel */
+
+.root {
+    -fx-background-color: transparent;
+    -fx-padding: 0;
+}
+
+.app-panel {
+    -fx-background-color: #f0f2f5;
+    -fx-background-radius: 10;
+    -fx-padding: 12;
+    -fx-text-fill: #111827;
+    -fx-border-color: #ef4444;
+    -fx-border-width: 2;
+    -fx-border-radius: 10;
+}
+
+.app-panel .label {
+    -fx-text-fill: #111827;
+}
+
+.text-field {
+    -fx-background-color: #ffffff;
+    -fx-control-inner-background: #ffffff;
+    -fx-text-fill: #111827;
+    -fx-prompt-text-fill: #6b7280;
+    -fx-border-color: #d1d5db;
+    -fx-border-radius: 4;
+    -fx-background-radius: 4;
+}
+
+.text-area {
+    -fx-background-color: #ffffff;
+    -fx-control-inner-background: #ffffff;
+    -fx-text-fill: #111827;
+    -fx-prompt-text-fill: #6b7280;
+    -fx-border-color: #d1d5db;
+    -fx-border-radius: 4;
+    -fx-background-radius: 4;
+}
+
+.list-view {
+    -fx-background-color: #ffffff;
+    -fx-control-inner-background: #ffffff;
+    -fx-border-color: #d1d5db;
+    -fx-border-radius: 6;
+    -fx-background-radius: 6;
+}
+
+.list-view .list-cell {
+    -fx-text-fill: #111827;
+    -fx-background-color: #ffffff;
+}
+
+.list-view .list-cell:selected {
+    -fx-background-color: #bfdbfe;
+    -fx-text-fill: #0f172a;
+}
+
+.list-view .list-cell:hover:selected {
+    -fx-background-color: #93c5fd;
+}
+
+.list-view .list-cell:hover {
+    -fx-background-color: #f3f4f6;
+}
+
+.button {
+    -fx-background-color: #ffffff;
+    -fx-text-fill: #111827;
+    -fx-border-color: #cbd5e1;
+    -fx-border-radius: 4;
+    -fx-background-radius: 4;
+}
+
+.button:hover {
+    -fx-background-color: #f1f5f9;
+}
+
+.button:default {
+    -fx-background-color: #2563eb;
+    -fx-text-fill: #ffffff;
+    -fx-border-color: #1d4ed8;
+}
+
+.button:default:hover {
+    -fx-background-color: #1d4ed8;
+}
+
+.dialog-pane {
+    -fx-background-color: #ffffff;
+}
+
+.dialog-pane > *.header-panel {
+    -fx-background-color: #f0f2f5;
+}
+
+.dialog-pane > *.header-panel > *.label {
+    -fx-text-fill: #111827;
+}
+
+.dialog-pane > *.content {
+    -fx-background-color: #ffffff;
+}
+
+.dialog-pane .label {
+    -fx-text-fill: #111827;
+}
+
+.dialog-pane:header *.header-panel *.label {
+    -fx-font-size: 1.05em;
+    -fx-text-fill: #111827;
+}
+
+.dialog-pane > *.button-bar > .container {
+    -fx-background-color: #f9fafb;
+}
+
+.dialog-pane .text-field,
+.dialog-pane .text-area {
+    -fx-background-color: #ffffff;
+    -fx-control-inner-background: #ffffff;
+    -fx-text-fill: #111827;
+    -fx-prompt-text-fill: #6b7280;
+    -fx-border-color: #d1d5db;
+}
+
+.resize-grip {
+    -fx-background-color: linear-gradient(to top left, #94a3b8 0%, #94a3b8 35%, transparent 35%),
+        linear-gradient(to top left, transparent 65%, #cbd5e1 65%, #cbd5e1 100%);
+    -fx-background-insets: 0 0 2 2;
+    -fx-opacity: 0.85;
+}
+
+.icon-toolbar-button {
+    -fx-padding: 6 10 6 10;
+}
+
+.list-row-copy {
+    -fx-padding: 2 8 2 8;
+    -fx-min-width: 2.5em;
+}
+
+.hint-label {
+    -fx-text-fill: #047857;
+    -fx-font-size: 11px;
+    -fx-padding: 2 0 0 0;
+}
+
+.preview-label {
+    -fx-text-fill: #374151;
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+}
+
+.preview-text {
+    -fx-control-inner-background: #ffffff;
+    -fx-background-color: #ffffff;
+    -fx-text-fill: #111827;
+    -fx-font-size: 12px;
+    -fx-border-color: #d1d5db;
+    -fx-border-radius: 4;
+    -fx-background-radius: 4;
+}
