@@ -117,7 +117,7 @@ Prompts stored in JSON are often **partly dynamic**: each template’s **`body`*
 
 ## 5. UI / UX (MainView) — current behavior
 
-**Main window:** `PromptButlerApp` builds the scene root as a **`StackPane`**: inner **`MainView`** (`VBox` with style class **`app-panel`**) plus a small **south-east resize grip** (drag to resize). **`stage.setResizable(true)`** with min size **320×360**. Toolbar uses **Ikonli Font Awesome 5** icons + **tooltips**.
+**Main window:** `PromptButlerApp` builds the scene root as a **`StackPane`**: inner **`MainView`** (`VBox` with style class **`app-panel`**) plus a small **south-east resize grip** (drag to resize). **`stage.setResizable(true)`** with min size **320×360**. **`StageStyle.TRANSPARENT`** removes the OS title bar; **`MainView`** implements **drag-to-move** on the top **Prompt Butler** strip (`installUndecoratedStageDrag`). Toolbar uses **Ikonli Font Awesome 5** icons + **tooltips**.
 
 **Toolbar (order):** New, Import, Export, **Data**, Quit (no global Edit / Delete / Copy). **Data** opens storage settings (`storage.json` pointer, directory chooser, clear pointer).
 

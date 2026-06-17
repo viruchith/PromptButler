@@ -152,6 +152,12 @@
     -fx-padding: 0 0 4 0;
 }
 
+/* TRANSPARENT stage has no OS title bar — drag the window from this strip */
+.window-drag-region {
+    -fx-min-height: 2em;
+    -fx-padding: 2 0 2 0;
+}
+
 .preview-label {
     -fx-text-fill: #374151;
     -fx-font-size: 11px;

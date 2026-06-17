@@ -9,6 +9,7 @@ import javafx.animation.PauseTransition;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.scene.Cursor;
 import javafx.scene.Node;
 import javafx.scene.Scene;
 import javafx.scene.control.Alert;
@@ -30,6 +31,7 @@ import javafx.util.Duration;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
+import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.FileChooser;
@@ -91,14 +93,38 @@ public final class MainView extends VBox {
         configureToolbar();
         Label appTitle = new Label("Prompt Butler");
         appTitle.getStyleClass().add("window-app-title");
+        titleBar.getStyleClass().add("window-drag-region");
         titleBar.setAlignment(Pos.CENTER_LEFT);
-        titleBar.getChildren().add(appTitle);
+        Region titleDragSpacer = new Region();
+        HBox.setHgrow(titleDragSpacer, Priority.ALWAYS);
+        titleBar.getChildren().addAll(appTitle, titleDragSpacer);
+        titleBar.setCursor(Cursor.MOVE);
+        installUndecoratedStageDrag(titleBar, stage);
         statusLabel.getStyleClass().add("hint-label");
         statusLabel.setMinHeight(18);
         listSection.getChildren().addAll(searchField, listView, toolbar, statusLabel);
         getChildren().addAll(titleBar, listSection);
         VBox.setVgrow(listSection, Priority.ALWAYS);
         VBox.setVgrow(listView, Priority.ALWAYS);
+    }
+
+    /**
+     * {@link javafx.stage.StageStyle#TRANSPARENT} removes the native title bar; dragging must be implemented in-scene.
+     */
+    private static void installUndecoratedStageDrag(Node dragHandle, Stage stage) {
+        final double[] offset = new double[2];
+        dragHandle.addEventFilter(MouseEvent.MOUSE_PRESSED, e -> {
+            if (e.getButton() == MouseButton.PRIMARY) {
+                offset[0] = stage.getX() - e.getScreenX();
+                offset[1] = stage.getY() - e.getScreenY();
+            }
+        });
+        dragHandle.addEventFilter(MouseEvent.MOUSE_DRAGGED, e -> {
+            if (e.isPrimaryButtonDown()) {
+                stage.setX(e.getScreenX() + offset[0]);
+                stage.setY(e.getScreenY() + offset[1]);
+            }
+        });
     }
 
     private void configureSearch() {

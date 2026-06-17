@@ -47,7 +47,8 @@ For maintainers and deep technical context (architecture, UFT/Java agents, UI fl
 ### 1. Open the overlay
 
 - Press **Ctrl+Alt+P** (Windows/Linux) or **Cmd+Alt+P** (macOS), **or** use the tray icon if you enabled tray auto-hide in `preferences.json`.
-- The window is an **always-on-top** card: search box at the top, list of prompts below, toolbar at the bottom.
+- The window is an **always-on-top** card: **Prompt Butler** title strip, search box, list of prompts, toolbar at the bottom.
+- **Move the window:** drag anywhere on the **Prompt Butler** title strip at the top (there is no native title bar because the overlay uses a transparent frame).
 
 ### 2. Find a prompt
 
