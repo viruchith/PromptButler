@@ -186,9 +186,35 @@ There is **no** `jpackage` or `shadowJar` task in this repository by default. Pr
 2. Zip **`build/install/prompt-butler/`** and attach it to a release, or copy the directory to users.
 3. Ensure **JDK or JRE 17+** is installed and **`java`** is on `PATH` when using the generated scripts.
 
-### 2. Fat JAR (optional)
+### 2. Fat JAR (cross-platform, single file)
 
-To ship a single JAR you would add a plugin such as **Shadow** and merge service files; you must still document **JavaFX module path** or use a **custom runtime image** (`jlink`). For most teams, **`installDist`** or **`jpackage`** (below) is easier than a raw fat JAR.
+Uses the [Shadow plugin](https://gradleup.com/shadow/) to produce one self-contained JAR with JavaFX natives for **Windows, macOS (Intel + Apple Silicon), and Linux** bundled inside. Java 17+ must be installed on the target machine, but no JavaFX installation or `--module-path` is needed.
+
+**Build (any OS, JDK 17+ required on build machine):**
+
+```bash
+# macOS / Linux
+./gradlew shadowJar
+
+# Windows
+.\gradlew.bat shadowJar
+```
+
+Output: `build/libs/prompt-butler-0.2.0-SNAPSHOT-all.jar`
+
+**Run on the target machine:**
+
+```bash
+# macOS / Linux
+java --add-exports=javafx.graphics/com.sun.glass.ui=ALL-UNNAMED \
+     --add-opens=javafx.graphics/com.sun.glass.ui=ALL-UNNAMED \
+     -jar build/libs/prompt-butler-0.2.0-SNAPSHOT-all.jar
+
+# Windows (single line)
+java --add-exports=javafx.graphics/com.sun.glass.ui=ALL-UNNAMED --add-opens=javafx.graphics/com.sun.glass.ui=ALL-UNNAMED -jar build\libs\prompt-butler-0.2.0-SNAPSHOT-all.jar
+```
+
+> **Why the JVM flags?** `PromptButlerApp` accesses `com.sun.glass.ui` internals for the global hotkey and tray integration. These are the same flags already declared in `applicationDefaultJvmArgs` in `build.gradle` for the `run` and `installDist` paths.
 
 ### 3. Native installers (`jpackage`) — recommended for “real” releases
 

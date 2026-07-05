@@ -11,6 +11,7 @@ plugins {
     id 'application'
     id 'org.openjfx.javafxplugin' version '0.0.14'
     id 'jacoco'
+    id 'com.github.johnrengelman.shadow' version '8.1.1'
 }
 
 group = 'com.viruchith.promptbutler'
@@ -39,6 +40,16 @@ dependencies {
     testImplementation 'org.mockito:mockito-core:5.11.0'
     testImplementation 'org.mockito:mockito-junit-jupiter:5.11.0'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+
+    // ── Cross-platform fat JAR support ──────────────────────────────────────
+    // org.openjfx.javafxplugin resolves only the current-OS native JAR.
+    // Explicitly declare all platform classifiers so shadowJar bundles natives
+    // for every supported OS. JavaFX PlatformUtil selects the right one at runtime.
+    ['win', 'linux', 'mac', 'mac-aarch64'].each { platform ->
+        ['javafx-base', 'javafx-controls', 'javafx-graphics'].each { module ->
+            runtimeOnly "org.openjfx:${module}:21.0.6:${platform}"
+        }
+    }
 }
 
 javafx {
@@ -224,3 +235,55 @@ afterEvaluate {
 }
 
 check.dependsOn jacocoTestCoverageVerification
+
+// ── Fat JAR (cross-platform) ─────────────────────────────────────────────────
+// Produces build/libs/prompt-butler-<version>-all.jar.
+// Bundles JavaFX natives for win / linux / mac / mac-aarch64.
+// Run with:
+//   java --add-exports=javafx.graphics/com.sun.glass.ui=ALL-UNNAMED \
+//        --add-opens=javafx.graphics/com.sun.glass.ui=ALL-UNNAMED \
+//        -jar build/libs/prompt-butler-0.2.0-SNAPSHOT-all.jar
+shadowJar {
+    archiveClassifier = 'all'
+    mergeServiceFiles()
+
+    // Each JavaFX platform JAR contains its own module-info.class.
+    // Merging 4 copies without exclusion causes a DuplicatesStrategy error.
+    exclude 'module-info.class'
+
+    // Signed JARs include *.SF / *.DSA / *.RSA manifests. Including them in
+    // a merged JAR causes SecurityException at startup. Strip them all.
+    exclude 'META-INF/LICENSE*'
+    exclude 'META-INF/NOTICE*'
+    exclude 'META-INF/*.SF'
+    exclude 'META-INF/*.DSA'
+    exclude 'META-INF/*.RSA'
+    exclude 'META-INF/INDEX.LIST'
+
+    // ShadowApplicationPlugin wires Main-Class from application.mainClass (PromptButlerApp)
+    // through Gradle's copy-spec manifest snapshot, which is captured before doFirst runs.
+    // The only reliable override is to rewrite the manifest entry in the finished archive.
+    // Launcher is a plain class (not extending Application) that delegates to
+    // PromptButlerApp.main(); JavaFX refuses classpath launches when Main-Class
+    // directly extends Application.
+    doLast {
+        def jar = archiveFile.get().asFile
+        def tmp = new File(jar.parentFile, "${jar.name}.tmp")
+        def newManifest = new java.util.jar.Manifest()
+        newManifest.mainAttributes.put(java.util.jar.Attributes.Name.MANIFEST_VERSION, '1.0')
+        newManifest.mainAttributes.put(java.util.jar.Attributes.Name.MAIN_CLASS,
+                'com.viruchith.PromptButler.Launcher')
+        new java.util.jar.JarOutputStream(new FileOutputStream(tmp), newManifest).withCloseable { out ->
+            new java.util.jar.JarFile(jar).withCloseable { src ->
+                src.entries().each { entry ->
+                    if (entry.name == 'META-INF/MANIFEST.MF') return
+                    out.putNextEntry(new java.util.jar.JarEntry(entry.name))
+                    src.getInputStream(entry).withCloseable { inn -> out << inn }
+                    out.closeEntry()
+                }
+            }
+        }
+        jar.delete()
+        tmp.renameTo(jar)
+    }
+}
