@@ -53,7 +53,7 @@ public final class TrayIntegration {
             exit.addActionListener(new java.awt.event.ActionListener() {
                 @Override
                 public void actionPerformed(java.awt.event.ActionEvent e) {
-                    Platform.exit();
+                    System.exit(0);
                 }
             });
             menu.add(open);

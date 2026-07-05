@@ -263,6 +263,7 @@ Third-party runtime components (OpenJFX, Gson, jNativeHook, Ikonli, etc.) are li
 
 - **Micro Focus UFT / `JAVA_TOOL_OPTIONS`:** The **`run`** task strips `JAVA_TOOL_OPTIONS` and `_JAVA_OPTIONS` from the **application** process (unless `-PkeepUftJvmHooks=true`). **`installDist`** rewrites **`prompt-butler.bat` / `prompt-butler`** so OpenJFX platform JARs are on **`--module-path`** with **`--add-modules`** (OpenJFX 11+ does not reliably start from a flat classpath alone), **`applicationDefaultJvmArgs`** Glass **`--add-exports` / `--add-opens`** apply there, and the scripts **clear** those env vars before **`java`**. Re-run **`./gradlew installDist`** after dependency or script changes. If hooks persist in your shell, clear them manually: `set JAVA_TOOL_OPTIONS=` and `set _JAVA_OPTIONS=` in `cmd` / PowerShell before starting the app.
 - **Global hotkey (jnativehook):** Some corporate machines block low-level hooks; use the window and toolbar if registration fails (errors are logged).
+- **Quit button / app won't exit:** The toolbar **Quit** and tray **Exit** both call `System.exit(0)` directly rather than `Platform.exit()`. On macOS, `Platform.exit()` deadlocks with AWT `SystemTray` (both compete for the AppKit lock). If you add a `Runtime.getRuntime().addShutdownHook` that calls `GlobalScreen.unregisterNativeHook()`, the JVM will hang on exit (including Ctrl+C); see `TECHNICAL.md §4.5`.
 - **JavaFX / transparent window issues:** See **`PROJECT_STATE_CHECKPOINT.md`** for mitigations (deferred clipboard, click resolution, etc.).
 
 ---

@@ -74,14 +74,24 @@ This document is for **developers** maintaining or extending the codebase. End-u
 
 ### 4.4 Auxiliary services
 
-- **`TrayIntegration`** — AWT `SystemTray` + `TrayIcon`; menu **Open** / **Exit**; image from `/appicon.png` scaled for tray.
+- **`TrayIntegration`** — AWT `SystemTray` + `TrayIcon`; menu **Open** / **Exit**; image from `/appicon.png` scaled for tray. **Exit** calls `System.exit(0)` directly.
 - **`AutoHideController`** — listens to `stage.focusedProperty`; applies `UserPreferences.autoHideMode` (`OPACITY`, `MINIMIZE`, `TRAY`, `HIDE`).
 - **`JNativeHookHotkeyService`** — registers global key listener; hotkey handler **must** `Platform.runLater` when touching the Stage (native thread vs FX thread).
-- **`stop()`** — unregisters hotkey listener and removes tray icon.
+- **`stop()`** — unregisters hotkey listener and removes tray icon. Note: only reached if `Platform.exit()` is called (e.g. from error paths in `start()`); normal quit bypasses this via `System.exit(0)` (see §4.5).
+
+### 4.5 Quit / exit strategy
+
+`Platform.exit()` deadlocks on macOS when AWT `SystemTray` is active: both JavaFX (cleaning up the native Glass window) and AWT compete for the macOS AppKit lock. The workaround used throughout this codebase is to call **`System.exit(0)`** directly whenever the user explicitly quits:
+
+- **Toolbar Quit button** (`MainView`) → `System.exit(0)`
+- **Tray → Exit** (`TrayIntegration`) → `System.exit(0)`
+- **Fatal startup error** (`PromptButlerApp.start`) → `Platform.exit()` (AWT tray is not yet installed; no deadlock risk)
+
+`System.exit(0)` terminates all threads—including JNativeHook's non-daemon native event dispatch thread—without deadlocking. `Application.stop()` is still present for the `Platform.exit()` error path and performs the same listener/tray cleanup, but it is **not** called on the normal quit path.
+
+> **Do not add a shutdown hook** that calls `GlobalScreen.unregisterNativeHook()`: that method blocks waiting for the native dispatch thread, which causes `System.exit(0)` (and even Ctrl+C) to hang.
 
 ---
-
-## 5. UI layer (`MainView` + `MainViewModel`)
 
 ### 5.1 `MainViewModel`
 

@@ -431,7 +431,7 @@ public final class MainView extends VBox {
         dataBtn.setOnAction(e -> onDataFolderSettings());
         Button quit = new Button("Quit");
         styleToolbarButton(quit, FontAwesomeSolid.SIGN_OUT_ALT, "Exit the application.");
-        quit.setOnAction(e -> javafx.application.Platform.exit());
+        quit.setOnAction(e -> System.exit(0));
         toolbar.getChildren().addAll(newBtn, importBtn, exportBtn, dataBtn, quit);
     }
 
