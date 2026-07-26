@@ -10,6 +10,12 @@ public final class UserPreferences {
     private AutoHideMode autoHideMode = AutoHideMode.OPACITY;
     /** Opacity when defocused and {@link AutoHideMode#OPACITY} is active (0–1). */
     private double defocusOpacity = 0.1d;
+    /** Whether dark mode is enabled. */
+    private boolean darkMode = false;
+    /** Custom global hotkey key code (jNativeHook VC_ constant); -1 means default (VC_P). */
+    private int hotkeyKeyCode = -1;
+    /** Custom global hotkey modifiers (bitmask of jNativeHook modifier masks); -1 means default. */
+    private int hotkeyModifiers = -1;
 
     public AutoHideMode getAutoHideMode() {
         return autoHideMode;
@@ -28,5 +34,29 @@ public final class UserPreferences {
             throw new IllegalArgumentException("defocusOpacity must be between 0 and 1");
         }
         this.defocusOpacity = defocusOpacity;
+    }
+
+    public boolean isDarkMode() {
+        return darkMode;
+    }
+
+    public void setDarkMode(boolean darkMode) {
+        this.darkMode = darkMode;
+    }
+
+    public int getHotkeyKeyCode() {
+        return hotkeyKeyCode;
+    }
+
+    public void setHotkeyKeyCode(int hotkeyKeyCode) {
+        this.hotkeyKeyCode = hotkeyKeyCode;
+    }
+
+    public int getHotkeyModifiers() {
+        return hotkeyModifiers;
+    }
+
+    public void setHotkeyModifiers(int hotkeyModifiers) {
+        this.hotkeyModifiers = hotkeyModifiers;
     }
 }

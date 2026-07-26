@@ -290,7 +290,13 @@ public final class MainView extends VBox {
 
     private void configureSearch() {
         searchField.setPromptText("Search prompts…");
-        searchField.textProperty().bindBidirectional(viewModel.searchTextProperty());
+        // Debounce: delay propagation to viewModel by 150ms after last keystroke
+        PauseTransition searchDebounce = new PauseTransition(Duration.millis(150));
+        searchDebounce.setOnFinished(ev -> viewModel.searchTextProperty().set(searchField.getText()));
+        searchField.textProperty().addListener((obs, oldVal, newVal) -> {
+            searchDebounce.stop();
+            searchDebounce.playFromStart();
+        });
     }
 
     /* ----- List: fuzzy-filtered items, row copy, single-/double-click semantics ----- */
@@ -335,7 +341,8 @@ public final class MainView extends VBox {
                             rowCopy.setOnAction(null);
                         } else {
                             setText(null);
-                            titleLabel.setText(item.getTitle() + formatTagsSuffixForCell(item.getTags()));
+                            String prefix = item.isFavorite() ? "\u2605 " : "";
+                            titleLabel.setText(prefix + item.getTitle() + formatTagsSuffixForCell(item.getTags()));
                             rowCopy.setOnAction(ev -> {
                                 ev.consume();
                                 copyTemplateBodyToClipboard(item, false);
@@ -367,12 +374,7 @@ public final class MainView extends VBox {
             singleClickDetailTimer.stop();
             pendingSingleClickTemplate = null;
             listView.getSelectionModel().select(t);
-            Platform.runLater(new Runnable() {
-                @Override
-                public void run() {
-                    onTemplateChosen(t);
-                }
-            });
+            Platform.runLater(() -> onTemplateChosen(t));
             e.consume();
             return;
         }
@@ -426,8 +428,8 @@ public final class MainView extends VBox {
         Button exportBtn = new Button("Export");
         styleToolbarButton(exportBtn, FontAwesomeSolid.FILE_EXPORT, "Save all prompts to a JSON file.");
         exportBtn.setOnAction(e -> onExport());
-        Button dataBtn = new Button("Data");
-        styleToolbarButton(dataBtn, FontAwesomeSolid.FOLDER_OPEN, "Choose where prompts.json and preferences.json are stored.");
+        Button dataBtn = new Button("Data Folder");
+        styleToolbarButton(dataBtn, FontAwesomeSolid.FOLDER_OPEN, "Choose where prompts.json and preferences.json are stored (restart required after change).");
         dataBtn.setOnAction(e -> onDataFolderSettings());
         Button quit = new Button("Quit");
         styleToolbarButton(quit, FontAwesomeSolid.SIGN_OUT_ALT, "Exit the application.");
@@ -590,24 +592,16 @@ public final class MainView extends VBox {
             }
             if (t != null) {
                 final PromptTemplate chosen = t;
-                Platform.runLater(new Runnable() {
-                    @Override
-                    public void run() {
-                        onTemplateChosen(chosen);
-                    }
-                });
+                Platform.runLater(() -> onTemplateChosen(chosen));
             }
             event.consume();
         }
     }
 
     public void focusSearch() {
-        Platform.runLater(new Runnable() {
-            @Override
-            public void run() {
-                searchField.requestFocus();
-                searchField.selectAll();
-            }
+        Platform.runLater(() -> {
+            searchField.requestFocus();
+            searchField.selectAll();
         });
     }
 
@@ -690,12 +684,9 @@ public final class MainView extends VBox {
         });
         wireVariableEnter();
         w.show();
-        Platform.runLater(new Runnable() {
-            @Override
-            public void run() {
-                if (!variableFields.isEmpty()) {
-                    variableFields.get(0).requestFocus();
-                }
+        Platform.runLater(() -> {
+            if (!variableFields.isEmpty()) {
+                variableFields.get(0).requestFocus();
             }
         });
     }
@@ -787,8 +778,14 @@ public final class MainView extends VBox {
     private void showCopiedStatus() {
         statusLabel.setText("Copied to clipboard.");
         PauseTransition clear = new PauseTransition(Duration.seconds(2.5));
-        clear.setOnFinished(ev -> statusLabel.setText(""));
+        clear.setOnFinished(ev -> showTemplateCount());
         clear.playFromStart();
+    }
+
+    /** Displays the current template count in the status label. */
+    public void showTemplateCount() {
+        int count = viewModel.getTemplateCount();
+        statusLabel.setText(count + (count == 1 ? " prompt" : " prompts"));
     }
 
     private void hideOverlay() {
@@ -827,6 +824,11 @@ public final class MainView extends VBox {
                             imp.getTags()));
                 }
                 viewModel.replaceAllTemplates(remapped);
+                showTemplateCount();
+                statusLabel.setText("Imported " + remapped.size() + " template(s).");
+                PauseTransition clearImport = new PauseTransition(Duration.seconds(4));
+                clearImport.setOnFinished(ev2 -> showTemplateCount());
+                clearImport.playFromStart();
             }
         } catch (Exception ex) {
             showError("Import failed", ex.getMessage());
@@ -890,6 +892,18 @@ public final class MainView extends VBox {
         styleToolbarButton(copyB, FontAwesomeSolid.COPY, "Copy prompt body to clipboard.");
         copyB.setOnAction(e -> copyTemplateBodyToClipboard(t, false));
 
+        Button favB = new Button(t.isFavorite() ? "Unfavorite" : "Favorite");
+        styleToolbarButton(favB, t.isFavorite() ? FontAwesomeSolid.STAR : FontAwesomeSolid.STAR,
+                t.isFavorite() ? "Remove from favorites." : "Mark as favorite (shown first in search).");
+        favB.setOnAction(e -> {
+            try {
+                viewModel.toggleFavorite(t);
+                closePromptDetailWindow();
+            } catch (Exception ex) {
+                showError("Could not update", messageOrClass(ex));
+            }
+        });
+
         Button editB = new Button("Edit");
         styleToolbarButton(editB, FontAwesomeSolid.PEN, "Edit title, body, and tags.");
         editB.setOnAction(e -> {
@@ -909,7 +923,7 @@ public final class MainView extends VBox {
         styleToolbarButton(closeB, FontAwesomeSolid.TIMES, "Close this window.");
         closeB.setOnAction(e -> closePromptDetailWindow());
 
-        HBox actions = new HBox(8, copyB, editB, delB, closeB);
+        HBox actions = new HBox(8, copyB, favB, editB, delB, closeB);
         VBox root = new VBox(10, idCaption, content, actions);
         root.getStyleClass().add("app-panel");
         root.setPadding(new Insets(12));
@@ -1016,14 +1030,11 @@ public final class MainView extends VBox {
         okButton.setGraphic(UiIcons.solid(FontAwesomeSolid.SAVE));
         Button cancelButton = (Button) dialog.getDialogPane().lookupButton(ButtonType.CANCEL);
         cancelButton.setGraphic(UiIcons.solid(FontAwesomeSolid.TIMES));
-        okButton.addEventFilter(javafx.event.ActionEvent.ACTION, new javafx.event.EventHandler<javafx.event.ActionEvent>() {
-            @Override
-            public void handle(javafx.event.ActionEvent evt) {
-                String title = InputText.trimToEmpty(titleField.getText());
-                if (title.isEmpty()) {
-                    showError("Validation", "Title is required.");
-                    evt.consume();
-                }
+        okButton.addEventFilter(javafx.event.ActionEvent.ACTION, evt -> {
+            String title = InputText.trimToEmpty(titleField.getText());
+            if (title.isEmpty()) {
+                showError("Validation", "Title is required.");
+                evt.consume();
             }
         });
 

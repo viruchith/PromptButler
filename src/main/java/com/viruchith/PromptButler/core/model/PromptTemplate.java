@@ -22,8 +22,13 @@ public final class PromptTemplate {
     private final String title;
     private final String body;
     private final List<String> tags;
+    private final boolean favorite;
 
     public PromptTemplate(String id, String title, String body, List<String> tags) {
+        this(id, title, body, tags, false);
+    }
+
+    public PromptTemplate(String id, String title, String body, List<String> tags, boolean favorite) {
         this.id = InputText.trimToEmpty(Objects.requireNonNull(id, "id"));
         if (this.id.isEmpty()) {
             throw new IllegalArgumentException("id cannot be blank");
@@ -45,6 +50,7 @@ public final class PromptTemplate {
             }
             this.tags = Collections.unmodifiableList(normalized);
         }
+        this.favorite = favorite;
     }
 
     public String getId() {
@@ -61,5 +67,9 @@ public final class PromptTemplate {
 
     public List<String> getTags() {
         return tags;
+    }
+
+    public boolean isFavorite() {
+        return favorite;
     }
 }

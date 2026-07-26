@@ -86,7 +86,7 @@ public final class JsonSchemaValidator {
         }
         for (String key : t.keySet()) {
             String k = key.toLowerCase(Locale.ROOT);
-            if (!("id".equals(k) || "title".equals(k) || "body".equals(k) || "tags".equals(k))) {
+            if (!("id".equals(k) || "title".equals(k) || "body".equals(k) || "tags".equals(k) || "favorite".equals(k))) {
                 throw new IllegalArgumentException("Unknown field on template: " + key);
             }
         }
