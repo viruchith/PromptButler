@@ -69,6 +69,15 @@ public final class JsonSchemaValidator {
         requireStringField(t, "id");
         requireStringField(t, "title");
         requireStringField(t, "body");
+        if (t.has("category")) {
+            requireStringField(t, "category");
+        }
+        if (t.has("usageCount") && !isNumberPrimitive(t.get("usageCount"))) {
+            throw new IllegalArgumentException("usageCount must be a number");
+        }
+        if (t.has("lastUsedEpochMillis") && !isNumberPrimitive(t.get("lastUsedEpochMillis"))) {
+            throw new IllegalArgumentException("lastUsedEpochMillis must be a number");
+        }
         if (!t.has("tags")) {
             throw new IllegalArgumentException("Missing tags array");
         }
@@ -86,10 +95,43 @@ public final class JsonSchemaValidator {
         }
         for (String key : t.keySet()) {
             String k = key.toLowerCase(Locale.ROOT);
-            if (!("id".equals(k) || "title".equals(k) || "body".equals(k) || "tags".equals(k) || "favorite".equals(k))) {
+            if (!("id".equals(k)
+                    || "title".equals(k)
+                    || "body".equals(k)
+                    || "tags".equals(k)
+                    || "favorite".equals(k)
+                    || "category".equals(k)
+                    || "usagecount".equals(k)
+                    || "lastusedepochmillis".equals(k)
+                    || "revisions".equals(k))) {
                 throw new IllegalArgumentException("Unknown field on template: " + key);
             }
         }
+        if (t.has("revisions")) {
+            JsonElement revisions = t.get("revisions");
+            if (!revisions.isJsonArray()) {
+                throw new IllegalArgumentException("revisions must be an array");
+            }
+            for (JsonElement revisionEl : revisions.getAsJsonArray()) {
+                if (revisionEl == null || !revisionEl.isJsonObject()) {
+                    throw new IllegalArgumentException("Each revision must be an object");
+                }
+                JsonObject revision = revisionEl.getAsJsonObject();
+                requireStringField(revision, "body");
+                if (!revision.has("updatedAtEpochMillis") || !isNumberPrimitive(revision.get("updatedAtEpochMillis"))) {
+                    throw new IllegalArgumentException("updatedAtEpochMillis must be a number");
+                }
+                for (String key : revision.keySet()) {
+                    if (!"body".equals(key) && !"updatedAtEpochMillis".equals(key)) {
+                        throw new IllegalArgumentException("Unknown field on revision: " + key);
+                    }
+                }
+            }
+        }
+    }
+
+    private static boolean isNumberPrimitive(JsonElement el) {
+        return el != null && el.isJsonPrimitive() && el.getAsJsonPrimitive().isNumber();
     }
 
     private static void requireStringField(JsonObject o, String field) {

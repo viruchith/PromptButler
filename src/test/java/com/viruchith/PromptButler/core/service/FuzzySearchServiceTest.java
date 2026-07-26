@@ -145,7 +145,22 @@ class FuzzySearchServiceTest {
             templates.add(t("Template " + i, "tag" + i));
         }
         List<PromptTemplate> ranked = svc.rank("Template 500", templates);
-        assertEquals(1000, ranked.size());
+        assertFalse(ranked.isEmpty());
         assertEquals("Template 500", ranked.get(0).getTitle());
+    }
+
+    @Test
+    void bodyContainsMatchIsConsidered() {
+        PromptTemplate inBody = new PromptTemplate("id1", "Alpha", "mentions production incident", Collections.emptyList());
+        PromptTemplate noMatch = new PromptTemplate("id2", "Bravo", "plain text", Collections.emptyList());
+        List<PromptTemplate> ranked = svc.rank("incident", Arrays.asList(noMatch, inBody));
+        assertEquals("Alpha", ranked.get(0).getTitle());
+    }
+
+    @Test
+    void irrelevantTemplatesAreFilteredByCutoff() {
+        PromptTemplate a = new PromptTemplate("a", "Completely unrelated", "none", Collections.emptyList());
+        List<PromptTemplate> ranked = svc.rank("zzzzzzzz", Arrays.asList(a));
+        assertTrue(ranked.isEmpty());
     }
 }

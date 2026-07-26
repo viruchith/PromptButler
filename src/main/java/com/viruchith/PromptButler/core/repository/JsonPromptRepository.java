@@ -10,8 +10,10 @@ import com.viruchith.PromptButler.core.service.JsonSchemaValidator;
 import java.io.IOException;
 import java.io.Reader;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -58,7 +60,16 @@ public final class JsonPromptRepository implements PromptRepository {
                 continue;
             }
             List<String> tags = t.tags == null ? Collections.<String>emptyList() : t.tags;
-            out.add(new PromptTemplate(t.id, t.title, t.body, tags, t.favorite));
+            out.add(new PromptTemplate(
+                    t.id,
+                    t.title,
+                    t.body,
+                    tags,
+                    t.favorite,
+                    t.category,
+                    Math.max(0L, t.usageCount),
+                    Math.max(0L, t.lastUsedEpochMillis),
+                    toRevisions(t.revisions)));
         }
         return out;
     }
@@ -76,6 +87,10 @@ public final class JsonPromptRepository implements PromptRepository {
             td.body = p.getBody();
             td.tags = new ArrayList<String>(p.getTags());
             td.favorite = p.isFavorite();
+            td.category = p.getCategory();
+            td.usageCount = p.getUsageCount();
+            td.lastUsedEpochMillis = p.getLastUsedEpochMillis();
+            td.revisions = fromRevisions(p.getRevisions());
             dto.templates.add(td);
         }
         String json = GSON.toJson(dto);
@@ -84,7 +99,13 @@ public final class JsonPromptRepository implements PromptRepository {
         if (parent != null) {
             Files.createDirectories(parent);
         }
-        Files.write(promptsFile, json.getBytes(StandardCharsets.UTF_8));
+        Path tmp = promptsFile.resolveSibling(promptsFile.getFileName().toString() + ".tmp");
+        Files.write(tmp, json.getBytes(StandardCharsets.UTF_8));
+        try {
+            Files.move(tmp, promptsFile, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+        } catch (AtomicMoveNotSupportedException e) {
+            Files.move(tmp, promptsFile, StandardCopyOption.REPLACE_EXISTING);
+        }
     }
 
     public static List<PromptTemplate> parseValidatedJsonString(String json, JsonSchemaValidator validator) {
@@ -99,7 +120,47 @@ public final class JsonPromptRepository implements PromptRepository {
                 continue;
             }
             List<String> tags = t.tags == null ? Collections.<String>emptyList() : t.tags;
-            out.add(new PromptTemplate(t.id, t.title, t.body, tags, t.favorite));
+            out.add(new PromptTemplate(
+                    t.id,
+                    t.title,
+                    t.body,
+                    tags,
+                    t.favorite,
+                    t.category,
+                    Math.max(0L, t.usageCount),
+                    Math.max(0L, t.lastUsedEpochMillis),
+                    toRevisions(t.revisions)));
+        }
+        return out;
+    }
+
+    private static List<PromptTemplate.Revision> toRevisions(List<RevisionDto> rows) {
+        if (rows == null || rows.isEmpty()) {
+            return Collections.emptyList();
+        }
+        ArrayList<PromptTemplate.Revision> out = new ArrayList<PromptTemplate.Revision>();
+        for (RevisionDto row : rows) {
+            if (row == null || row.body == null) {
+                continue;
+            }
+            out.add(new PromptTemplate.Revision(row.body, Math.max(0L, row.updatedAtEpochMillis)));
+        }
+        return out;
+    }
+
+    private static List<RevisionDto> fromRevisions(List<PromptTemplate.Revision> revisions) {
+        if (revisions == null || revisions.isEmpty()) {
+            return Collections.emptyList();
+        }
+        ArrayList<RevisionDto> out = new ArrayList<RevisionDto>();
+        for (PromptTemplate.Revision revision : revisions) {
+            if (revision == null) {
+                continue;
+            }
+            RevisionDto dto = new RevisionDto();
+            dto.body = revision.getBody();
+            dto.updatedAtEpochMillis = revision.getUpdatedAtEpochMillis();
+            out.add(dto);
         }
         return out;
     }
@@ -133,5 +194,15 @@ public final class JsonPromptRepository implements PromptRepository {
         String body;
         List<String> tags;
         boolean favorite;
+        String category;
+        long usageCount;
+        long lastUsedEpochMillis;
+        List<RevisionDto> revisions;
+    }
+
+    @SuppressWarnings("unused")
+    private static final class RevisionDto {
+        String body;
+        long updatedAtEpochMillis;
     }
 }

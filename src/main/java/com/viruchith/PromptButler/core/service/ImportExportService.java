@@ -8,8 +8,10 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.function.Supplier;
 
 public final class ImportExportService {
 
@@ -39,5 +41,30 @@ public final class ImportExportService {
         Objects.requireNonNull(templates, "templates");
         JsonPromptRepository repo = new JsonPromptRepository(exportFile, validator);
         repo.saveAll(templates);
+    }
+
+    /**
+     * Remaps imported templates to new IDs so replace-all imports never collide with an existing library.
+     */
+    public List<PromptTemplate> remapImportedTemplates(List<PromptTemplate> imported, Supplier<String> idSupplier) {
+        Objects.requireNonNull(imported, "imported");
+        Objects.requireNonNull(idSupplier, "idSupplier");
+        ArrayList<PromptTemplate> remapped = new ArrayList<PromptTemplate>();
+        for (PromptTemplate template : imported) {
+            if (template == null) {
+                continue;
+            }
+            remapped.add(new PromptTemplate(
+                    idSupplier.get(),
+                    template.getTitle(),
+                    template.getBody(),
+                    template.getTags(),
+                    template.isFavorite(),
+                    template.getCategory(),
+                    template.getUsageCount(),
+                    template.getLastUsedEpochMillis(),
+                    template.getRevisions()));
+        }
+        return remapped;
     }
 }

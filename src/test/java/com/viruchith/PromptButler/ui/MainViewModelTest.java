@@ -7,6 +7,7 @@ import org.mockito.Mockito;
 
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -100,5 +101,50 @@ class MainViewModelTest {
                 new PromptTemplate("b", "B", "b", Collections.emptyList())));
         assertFalse(vm.idExists("a"));
         assertTrue(vm.idExists("b"));
+    }
+
+    @Test
+    void categoryFilterLimitsResults() {
+        PromptRepository repo = Mockito.mock(PromptRepository.class);
+        MainViewModel vm = new MainViewModel(repo, Arrays.asList(
+                new PromptTemplate("a", "A", "b", Collections.emptyList(), false, "Development", 0L, 0L, Collections.emptyList()),
+                new PromptTemplate("b", "B", "b", Collections.emptyList(), false, "Writing", 0L, 0L, Collections.emptyList())));
+        vm.categoryFilterProperty().set("Development");
+        assertEquals(1, vm.getFilteredList().size());
+        assertEquals("a", vm.getFilteredList().get(0).getId());
+    }
+
+    @Test
+    void markTemplateUsedIncrementsUsage() throws Exception {
+        PromptRepository repo = Mockito.mock(PromptRepository.class);
+        PromptTemplate p = new PromptTemplate("a", "A", "b", Collections.emptyList());
+        MainViewModel vm = new MainViewModel(repo, Arrays.asList(p));
+        vm.markTemplateUsed(p);
+        PromptTemplate loaded = vm.getMasterTemplates().get(0);
+        assertEquals(1L, loaded.getUsageCount());
+        assertTrue(loaded.getLastUsedEpochMillis() > 0L);
+    }
+
+    @Test
+    void compileSupportsQuotedAndUnquotedValues() {
+        PromptRepository repo = Mockito.mock(PromptRepository.class);
+        PromptTemplate p = new PromptTemplate("a", "A", "Hello {{name}}", Collections.emptyList());
+        MainViewModel vm = new MainViewModel(repo, Arrays.asList(p));
+        HashMap<String, String> values = new HashMap<>();
+        values.put("name", "Ada");
+        assertEquals("Hello Ada", vm.compile(p, values));
+        assertEquals("Hello \"Ada\"", vm.compile(p, values, true));
+    }
+
+    @Test
+    void deleteCategoryReassignsPromptsToGeneral() throws Exception {
+        PromptRepository repo = Mockito.mock(PromptRepository.class);
+        PromptTemplate a = new PromptTemplate("a", "A", "b", Collections.emptyList(), false, "Dev", 0L, 0L, Collections.emptyList());
+        PromptTemplate b = new PromptTemplate("b", "B", "b", Collections.emptyList(), false, "Writing", 0L, 0L, Collections.emptyList());
+        MainViewModel vm = new MainViewModel(repo, Arrays.asList(a, b));
+        int affected = vm.deleteCategoryAndReassignToGeneral("Dev");
+        assertEquals(1, affected);
+        PromptTemplate reassigned = vm.getMasterTemplates().stream().filter(t -> "a".equals(t.getId())).findFirst().orElseThrow();
+        assertEquals("General", reassigned.getCategory());
     }
 }

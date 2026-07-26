@@ -2,6 +2,8 @@
 
 This document is for **developers** maintaining or extending the codebase. End-user usage remains in [README.md](README.md).
 
+Current project version: **`0.4.0-SNAPSHOT`**.
+
 ---
 
 ## 1. Copyright and license
@@ -37,7 +39,7 @@ This document is for **developers** maintaining or extending the codebase. End-u
 | `...core.logging` | **`AppLogger`** — thin stderr logger, verbosity tied to `BuildProfile` |
 | `...core.model` | Immutable **`PromptTemplate`**, **`UserPreferences`**, **`BuildProfile`**, **`AutoHideMode`** |
 | `...core.repository` | **`PromptRepository`** interface; **`JsonPromptRepository`** — Gson DTOs, file I/O, schema validation hook |
-| `...core.service` | **FuzzySearchService**, **VariableParser**, **TemplateCompiler**, **JsonSchemaValidator**, **ImportExportService**, **RecoveryService**, **PreferencesRepository** |
+| `...core.service` | **FuzzySearchService**, **VariableParser**, **TemplateCompiler**, **JsonSchemaValidator**, **ImportExportService**, **RecoveryService**, **PreferencesRepository**, **DataFileWatchService** |
 | `...core.storage` | **`StoragePaths`** — data directory resolution; **`SafePathResolver`** — prevents path escape when resolving children |
 | `...core.util` | **`InputText`** — shared `trim` normalization for UI and model |
 | `...os` | **`JNativeHookHotkeyService`** — low-level keyboard listener, maps to overlay toggle |
@@ -68,15 +70,17 @@ This document is for **developers** maintaining or extending the codebase. End-u
 2. **`MainView`** — root content: title strip (icon + drag region), search, `ListView`, toolbar, status.
 3. **`StackPane` shell** — holds `MainView` (top-left) and a small **south-east `Region`** used as a **resize grip** (mouse drag updates `stage` width/height with minimum bounds).
 4. **`Scene`** — transparent fill (`OverlayStageFactory.applySceneBackgroundTransparent`) so rounded `app-panel` CSS shows correctly on the desktop.
-5. **Stylesheets** — `/styles/overlay.css` or `overlay-dev.css` from classpath.
+5. **Stylesheets** — `/styles/overlay.css`, `overlay-dev.css`, or `overlay-dark.css` from classpath (theme is preference-driven at runtime).
 6. **`stage.setOnCloseRequest`** — **consumes** the default close action and **hides** the stage (overlay pattern, not process exit).
 7. **`loadApplicationIcon`** — adds `/appicon.png` to `stage.getIcons()` for taskbar / OS integration.
+8. **Content-aware minimum size** — startup computes minimum stage dimensions from `MainView` preferred size so toolbar/action buttons are not compressed on small initial windows.
 
 ### 4.4 Auxiliary services
 
 - **`TrayIntegration`** — AWT `SystemTray` + `TrayIcon`; menu **Open** / **Exit**; image from `/appicon.png` scaled for tray. **Exit** calls `System.exit(0)` directly.
-- **`AutoHideController`** — listens to `stage.focusedProperty`; applies `UserPreferences.autoHideMode` (`OPACITY`, `MINIMIZE`, `TRAY`, `HIDE`).
+- **`AutoHideController`** — listens to `stage.focusedProperty`; applies `UserPreferences.autoHideMode` (`OPACITY`, `MINIMIZE`, `TRAY`, `HIDE`), with a suspend guard for app-owned modal flows (Settings/dialogs).
 - **`JNativeHookHotkeyService`** — registers global key listener; hotkey handler **must** `Platform.runLater` when touching the Stage (native thread vs FX thread).
+- **`DataFileWatchService`** — watches the data directory and triggers FX-thread reloads for `prompts.json` and `preferences.json`.
 - **`stop()`** — unregisters hotkey listener and removes tray icon. Note: only reached if `Platform.exit()` is called (e.g. from error paths in `start()`); normal quit bypasses this via `System.exit(0)` (see §4.5).
 
 ### 4.5 Quit / exit strategy
@@ -96,9 +100,10 @@ This document is for **developers** maintaining or extending the codebase. End-u
 ### 5.1 `MainViewModel`
 
 - Holds **`ObservableList<PromptTemplate>`** `masterList` (authoritative in-memory library) and **`filteredList`** (search results).
-- **`searchText`** `StringProperty` — bidirectionally bound to the search `TextField`; listener calls **`refreshFilter()`** which trims query via **`InputText`** and runs **`FuzzySearchService.rank`**.
+- **`searchText`** + `categoryFilter` properties drive `refreshFilter()`; query is normalized via `InputText`, category filtering is applied before ranking.
 - **Mutations** — `addTemplate`, `deleteTemplate`, `replaceTemplateById`, `replaceAllTemplates` persist through **`PromptRepository`** and refresh the filter.
-- **`variablesFor` / `compile`** — delegate to **`VariableParser`** and **`TemplateCompiler`** on the template **body** (placeholders `{{name}}` with allowed charset per `VariableParser`).
+- **`variablesFor` / `compile`** — delegate to **`VariableParser`** and **`TemplateCompiler`** on template body placeholders.
+- Category workflows include duplicate, restore-delete, and category deletion with reassignment to `General`.
 
 ### 5.2 `MainView` (behavior map)
 
@@ -110,8 +115,8 @@ This document is for **developers** maintaining or extending the codebase. End-u
 | **Double-click / Enter on list** | `onTemplateChosen` — no `{{vars}}` → clipboard + hide overlay with short `PauseTransition` delay (avoids Glass issues); with vars → **`openVariableParametersWindow`** (modeless `Stage`, `Modality.NONE`) |
 | **Variable window** | `commitVariables` closes variable stage then **`copyPlainTextThenMaybeHide(..., false)`** so main overlay stays visible |
 | **Escape** | If variable window logic applies, close it; else **`hideOverlay()`** (hide stage, clear clipboard adapter retained buffers, close child stages) |
-| **Import / Export** | `ImportExportService` + file choosers; import wraps templates with new UUIDs before `replaceAllTemplates` |
-| **Dialogs** | Light theme stylesheet URL applied manually to `DialogPane` / `Alert` (dialogs do not inherit main scene CSS) |
+| **Import / Export** | `ImportExportService` + file choosers; import remaps UUIDs, export supports selected rows, drag/drop import supported |
+| **Dialogs** | Theme stylesheet URL applied manually to `DialogPane` / `Alert` (dialogs do not inherit main scene CSS); Settings flow suspends auto-hide to avoid unintended tray hide |
 
 ### 5.3 Clipboard (`ClipboardPort` / `JavaFxClipboardAdapter`)
 
@@ -129,6 +134,7 @@ This document is for **developers** maintaining or extending the codebase. End-u
 - **`JsonSchemaValidator`** validates the **entire** prompt store JSON string before Gson parsing (max size guard, structural rules).
 - **`PromptTemplate`** constructor **normalizes** id/title/body/tags via **`InputText`** (trim; blank tags dropped; blank id rejected).
 - **Import** re-validates and assigns **new UUIDs** to every imported template to avoid collisions with the live library.
+- `PromptTemplate` now supports `category`, `usageCount`, `lastUsedEpochMillis`, and bounded `revisions`.
 
 ---
 
@@ -163,6 +169,7 @@ This document is for **developers** maintaining or extending the codebase. End-u
 | Different hotkey | Extend or replace **`JNativeHookHotkeyService`** mapping (`NativeKeyEvent` modifiers) |
 | Packaged installers | Start from **`installDist`** output; use **`jpackage`** with a runtime image that includes required `javafx.*` modules (see README publishing section) |
 | Theming | Extend `overlay.css` / `overlay-dev.css`; keep dialog stylesheet attachment in `MainView` in sync |
+| Icon styling | `UiIcons` uses `app-icon-glyph`; set icon colors in CSS per theme (`overlay.css` / `overlay-dark.css`) |
 
 ---
 
