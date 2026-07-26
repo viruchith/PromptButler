@@ -10,11 +10,11 @@
 
 Templates are stored as **JSON** on disk (with optional **import/export**), UUID-based ids, and a **configurable data folder** so you can keep prompts next to projects or in a shared drive.
 
-For **developers** (architecture, packages, build internals, extension points), see **[`TECHNICAL.md`](TECHNICAL.md)**. For narrative / checkpoint-style project state (including UFT/Java agent notes), see **[`PROJECT_STATE_CHECKPOINT.md`](PROJECT_STATE_CHECKPOINT.md)**.
+For **developers** (architecture, packages, build internals, extension points), see **[`TECHNICAL.md`](TECHNICAL.md)**. For narrative / checkpoint-style project state (including UFT/Java agent notes), see **[`PROJECT_STATE_CHECKPOINT.md`](PROJECT_STATE_CHECKPOINT.md)**. Release history is in **[`CHANGELOG.md`](CHANGELOG.md)**.
 
 ---
 
-**Version:** `0.3.0-SNAPSHOT` (see `build.gradle` → `version`).
+**Version:** `0.4.0-SNAPSHOT` (see `build.gradle` → `version`).
 
 ## Table of contents
 
@@ -35,15 +35,19 @@ For **developers** (architecture, packages, build internals, extension points), 
 
 | Capability | Description |
 |------------|-------------|
-| **Fuzzy search** | Find prompts by title and tags. |
+| **Fuzzy search** | Tiered matching over title/tags/body (prefix/contains first, fuzzy fallback). |
 | **Favorites** | Star templates to pin them at the top of search results (★). |
 | **Variables** | Templates support `{{name}}` placeholders; fill a small form, then copy compiled text. |
 | **Clipboard** | One-click or keyboard copy of prompt body or compiled output. |
 | **Import / export** | JSON library for backup, sharing, or migration (import reassigns UUID ids). |
+| **Categories** | Assign categories, filter by category, create/delete categories in dialogs (delete reassigns to **General**). |
+| **Usage + revisions** | Tracks usage count, last-used timestamp, and bounded body revision history. |
 | **Tray & auto-hide** | Optional system tray and defocus/minimize behaviors (see `preferences.json`). |
 | **Dark mode** | Toggle dark theme via `preferences.json` (`"darkMode": true`). |
+| **Theme-aware icons** | Icon glyph colors adapt per theme (white in dark mode for better contrast). |
 | **Configurable hotkey** | Override the global toggle shortcut in `preferences.json` (`hotkeyKeyCode`, `hotkeyModifiers`). |
 | **Data folder** | Toolbar **Data Folder** sets where `prompts.json` / `preferences.json` live (pointer under `~/PromptButler/`; restart to apply). |
+| **Live reload** | `prompts.json` / `preferences.json` updates are watched and reloaded at runtime. |
 
 ---
 
@@ -57,7 +61,8 @@ For **developers** (architecture, packages, build internals, extension points), 
 
 ### 2. Find a prompt
 
-- Type in the **search** box; matching is **fuzzy** on **title** and **tags** (e.g. typing `refac` can surface *Refactor assistant*).
+- Type in the **search** box; ranking prioritizes prefix/contains hits, includes body text matches, and falls back to bounded fuzzy scoring.
+- Use the **Category** dropdown beside search to filter templates.
 - Use **↑** / **↓** while the **list** is focused to move the selection (click the list first if focus is in the search field).
 
 ### 3. Copy without opening the variable form
@@ -83,7 +88,7 @@ Act as an expert {{language}} developer and refactor the following code with {{s
 
 1. **Double-click** the prompt in the list, **or** select it and press **Enter** (with list focus, not inside the search field).
 2. A **separate modeless window** opens: one **text field per variable** (`language`, `style`, `code_block` in the example above). The **main overlay stays visible** so you can search and browse prompts while the form is open.
-3. Fill the fields. Press **Enter** to jump to the next field; on the **last** field, **Enter** acts like **Copy & close**.
+3. Fill the fields. Press **Ctrl+Enter** (Windows/Linux) or **Cmd+Enter** (macOS) to jump to the next field; on the **last** field this acts like **Copy & close**.
 4. Click **Copy & close** to put the **fully expanded** text on the clipboard and close the variables window (**the main overlay stays open**), **or** **Copy — keep open** to copy and leave the variables window open.
 5. Paste into your editor, browser, or chat. Press **Escape** while the variables window is focused to close it without copying; **Escape** on the main overlay still hides the overlay when the variables window is not open.
 
@@ -98,11 +103,16 @@ If the body has **no** `{{placeholders}}`:
 
 | Button | Use it to… |
 |--------|------------|
-| **New** | Create a template (title, body, tags). **Id** is a new **UUID** automatically. |
-| **Import** | Replace the whole library from a JSON file (existing ids in the file are **reassigned** on import). |
-| **Export** | Save all templates to a JSON file for backup or sharing. |
-| **Data** | Change where `prompts.json` / `preferences.json` are stored (writes a pointer under `~/PromptButler/`; **restart** the app to apply). |
+| **New** | Create a template (title, body, tags, category). Category is selected from a dropdown and supports **New Category** popup creation. |
+| **Shortcuts** | Show keyboard shortcut help (**F1**). |
+| **Import** | Replace the whole library from a JSON file (ids are reassigned on import). Drag-and-drop `.json` import is supported. |
+| **Export** | Export selected templates, or all templates if none are selected. |
+| **Settings** | Configure dark mode, auto-hide mode, compile quoting, default category, and delete categories (prompts move to **General**). |
+| **Data** | Change where `prompts.json` / `preferences.json` are stored (writes a pointer under `~/PromptButler/`; **restart** to apply). |
+| **Undo Delete** | Restore the most recently deleted prompt. |
 | **Quit** | Exit the application. |
+
+**Note:** Opening Settings and in-app dialogs no longer triggers tray auto-hide while those windows are active.
 
 ### 7. Example: add your own snippet via JSON
 
@@ -117,7 +127,7 @@ After running once, edit **`prompts.json`** in your [data directory](#configurat
 }
 ```
 
-Use a **new UUID** for `id` when adding by hand (or use **New** in the app so the id is generated for you). The app **does not watch** `prompts.json` for live edits—**restart Prompt Butler** after manual changes so the library reloads from disk.
+Use a **new UUID** for `id` when adding by hand (or use **New** in the app so the id is generated for you). The app now watches `prompts.json` and reloads changes at runtime.
 
 ---
 
@@ -203,7 +213,7 @@ Uses the [Shadow plugin](https://gradleup.com/shadow/) to produce one self-conta
 .\gradlew.bat shadowJar
 ```
 
-Output: `build/libs/prompt-butler-0.3.0-SNAPSHOT-all.jar`
+Output: `build/libs/prompt-butler-0.4.0-SNAPSHOT-all.jar`
 
 **Run on the target machine:**
 
@@ -211,10 +221,10 @@ Output: `build/libs/prompt-butler-0.3.0-SNAPSHOT-all.jar`
 # macOS / Linux
 java --add-exports=javafx.graphics/com.sun.glass.ui=ALL-UNNAMED \
      --add-opens=javafx.graphics/com.sun.glass.ui=ALL-UNNAMED \
-     -jar build/libs/prompt-butler-0.3.0-SNAPSHOT-all.jar
+     -jar build/libs/prompt-butler-0.4.0-SNAPSHOT-all.jar
 
 # Windows (single line)
-java --add-exports=javafx.graphics/com.sun.glass.ui=ALL-UNNAMED --add-opens=javafx.graphics/com.sun.glass.ui=ALL-UNNAMED -jar build\libs\prompt-butler-0.3.0-SNAPSHOT-all.jar
+java --add-exports=javafx.graphics/com.sun.glass.ui=ALL-UNNAMED --add-opens=javafx.graphics/com.sun.glass.ui=ALL-UNNAMED -jar build\libs\prompt-butler-0.4.0-SNAPSHOT-all.jar
 ```
 
 > **Why the JVM flags?** `PromptButlerApp` accesses `com.sun.glass.ui` internals for the global hotkey and tray integration. These are the same flags already declared in `applicationDefaultJvmArgs` in `build.gradle` for the `run` and `installDist` paths.
@@ -242,9 +252,10 @@ The Gradle **`maven-publish`** plugin is **not** configured here. To publish the
 | `PROMPT_BUTLER_DIR` or `-Dprompt.butler.dir=...` | Override data directory (highest precedence). |
 | Toolbar **Data** | Choose JSON storage folder; writes `${user.home}/PromptButler/storage.json`; **restart** to apply. |
 | Default (all platforms) | `${user.home}/PromptButler/` for `prompts.json` and `preferences.json`. |
-| `preferences.json` | `autoHideMode`: `OPACITY`, `MINIMIZE`, `TRAY`, `HIDE`; `defocusOpacity` (0–1); `darkMode` (true/false); `hotkeyKeyCode` / `hotkeyModifiers` (jNativeHook constants, -1 = default). |
+| `preferences.json` | `autoHideMode`: `OPACITY`, `MINIMIZE`, `TRAY`, `HIDE`; `defocusOpacity` (0–1); `darkMode`; `hotkeyKeyCode` / `hotkeyModifiers`; `quoteCompiledVariables`; `defaultCategory`; `windowX`/`windowY`/`windowWidth`/`windowHeight`. |
 
-**UI summary:** Row **Copy**; single-click opens a **detail** window (copy / edit / delete). **New** creates prompts (UUID ids). **Import** replaces the library. **Double-click** or **Enter** on the list runs the “choose template” flow (variables or copy-and-hide). **Ctrl+C** copies the selected body when the list is focused.
+**UI summary:** Row **Copy**; single-click opens a **detail** window (copy / favorite / edit / duplicate / delete). **New** creates prompts (UUID ids, category dropdown + category popup). **Import** replaces the library; drag/drop `.json` works. **Double-click** or **Enter** on the list runs the choose flow (variables or copy-and-hide). **Ctrl/Cmd+C** copies selected body when list is focused.
+The main Category filter now applies immediately and remains selected until changed.
 
 ---
 
@@ -256,39 +267,7 @@ See **[TECHNICAL.md](TECHNICAL.md)** for package layout, startup sequence, JavaF
 
 ## Changelog
 
-### 0.3.0-SNAPSHOT
-
-**Features**
-
-- **Favorites:** Star/pin templates so they appear first in search results (★ prefix in list).
-- **Dark mode:** New `overlay-dark.css` theme; enable via `"darkMode": true` in `preferences.json`.
-- **Configurable global hotkey:** Override the default Ctrl+Alt+P / Cmd+Alt+P via `hotkeyKeyCode` and `hotkeyModifiers` in `preferences.json`.
-- **Search debounce:** 150 ms delay before filtering fires, eliminating lag on large libraries.
-- **Template count:** Status bar shows the total number of prompts.
-- **Import feedback:** Success notification displays how many templates were imported.
-- **Data Folder button:** Renamed from "Data" with a clearer tooltip.
-
-**Performance**
-
-- O(1) ID lookup index (`HashSet`) replaces O(n) linear scan in the view model.
-- Favorites-aware sort: favorited templates bubble to the top at the same relevance score.
-
-**Code quality & security**
-
-- Replaced bare `printStackTrace()` calls with structured `AppLogger` output (Semgrep SCA fix).
-- Converted anonymous `Runnable` inner classes to lambdas.
-- `favorite` field added to JSON schema allowlist.
-
-**Tests**
-
-- New `JNativeHookHotkeyServiceTest` (hotkey matching, arming, custom hotkey).
-- Expanded `FuzzySearchServiceTest` (Unicode, large lists, favorites ordering).
-- Expanded `VariableParserTest` (nested braces, adjacent placeholders, Unicode).
-- Expanded `PromptTemplateTest`, `UserPreferencesTest`, `MainViewModelTest`.
-
-### 0.2.0-SNAPSHOT
-
-- Initial public version: overlay window, fuzzy search, `{{variable}}` fill-in, import/export, global hotkey, tray integration.
+See **[`CHANGELOG.md`](CHANGELOG.md)** for release history.
 
 ---
 
@@ -304,6 +283,8 @@ Third-party runtime components (OpenJFX, Gson, jNativeHook, Ikonli, etc.) are li
 
 - **Micro Focus UFT / `JAVA_TOOL_OPTIONS`:** The **`run`** task strips `JAVA_TOOL_OPTIONS` and `_JAVA_OPTIONS` from the **application** process (unless `-PkeepUftJvmHooks=true`). **`installDist`** rewrites **`prompt-butler.bat` / `prompt-butler`** so OpenJFX platform JARs are on **`--module-path`** with **`--add-modules`** (OpenJFX 11+ does not reliably start from a flat classpath alone), **`applicationDefaultJvmArgs`** Glass **`--add-exports` / `--add-opens`** apply there, and the scripts **clear** those env vars before **`java`**. Re-run **`./gradlew installDist`** after dependency or script changes. If hooks persist in your shell, clear them manually: `set JAVA_TOOL_OPTIONS=` and `set _JAVA_OPTIONS=` in `cmd` / PowerShell before starting the app.
 - **Global hotkey (jnativehook):** Some corporate machines block low-level hooks; use the window and toolbar if registration fails (errors are logged).
+- **Settings opens then app hides to tray:** Fixed in current builds. If you still see this, verify you are running **`0.4.0-SNAPSHOT`** or newer.
+- **Window opens too small / buttons look compressed:** Fixed in current builds with content-aware minimum startup sizing.
 - **Quit button / app won't exit:** The toolbar **Quit** and tray **Exit** both call `System.exit(0)` directly rather than `Platform.exit()`. On macOS, `Platform.exit()` deadlocks with AWT `SystemTray` (both compete for the AppKit lock). If you add a `Runtime.getRuntime().addShutdownHook` that calls `GlobalScreen.unregisterNativeHook()`, the JVM will hang on exit (including Ctrl+C); see `TECHNICAL.md §4.5`.
 - **JavaFX / transparent window issues:** See **`PROJECT_STATE_CHECKPOINT.md`** for mitigations (deferred clipboard, click resolution, etc.).
 

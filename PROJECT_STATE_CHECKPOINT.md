@@ -10,6 +10,17 @@
 
 Original product vision referenced **Java 8** + bundled FX; **Maven-hosted OpenJFX requires JDK 11+** bytecode, so the build intentionally uses **Java 17** + **OpenJFX 21** while keeping **core** code free of post-8 APIs where practical.
 
+### 2026 feature-pass update (implemented)
+
+- Category-aware templates (`category`) with UI category filter and category-aware create/edit.
+- Usage telemetry per template (`usageCount`, `lastUsedEpochMillis`) updated when templates are copied/used.
+- Body revision history (`revisions`) persisted with bounded history when a template body is edited.
+- Search now uses tiered matching (prefix/contains on title+tags, body contains) with cutoff filtering and bounded Levenshtein.
+- Compile behavior now supports optional quoted substitutions (`quoteCompiledVariables` preference).
+- New UI capabilities: duplicate template, undo delete, shortcut help (F1), drag/drop JSON import, selected-items export, markdown-style preview, and toast-style status feedback.
+- Preferences expanded with dark mode/settings dialog, default category, quote behavior, and persisted window position/size.
+- Reliability improvements: atomic file writes and live filesystem watch/reload for prompts/preferences.
+
 ---
 
 ## 2. Repository layout (source of truth)
@@ -32,7 +43,7 @@ PromptButler/
     │   │   ├── logging/AppLogger.java
     │   │   ├── model/                 # PromptTemplate, BuildProfile, AutoHideMode, UserPreferences
     │   │   ├── repository/            # PromptRepository, JsonPromptRepository
-    │   │   ├── service/               # FuzzySearch, VariableParser, TemplateCompiler, JSON validation, recovery, import/export, preferences
+    │   │   ├── service/               # FuzzySearch, VariableParser, TemplateCompiler, JSON validation, recovery, import/export, preferences, data file watch
     │   │   └── storage/               # StoragePaths, SafePathResolver
     │   ├── ui/                        # JavaFX views + MVVM-ish MainViewModel
     │   │   ├── MainView.java          # Programmatic UI (no FXML)
@@ -77,7 +88,7 @@ PromptButler/
 
 - **Undecorated**, **transparent** `StageStyle.TRANSPARENT`, **always on top** (`OverlayStageFactory`).
 - **Scene fill** transparent so the **rounded light panel** (`MainView` + CSS) shows as a card over the desktop.
-- **UI theme:** **Light only** — `overlay.css` / `overlay-dev.css` (solid light gray/white, dark text). **Dialogs** do not inherit the main scene stylesheet; **`MainView.attachLightDialogStyles(DialogPane)`** adds `/styles/overlay.css` to every `Alert` / `Dialog` pane.
+- **UI theme:** light/dark via preferences. Main scene stylesheet is switched at runtime, and dialogs use matching stylesheet (`overlay.css` or `overlay-dark.css`).
 
 ### Auto-hide (`AutoHideController` + `UserPreferences`)
 
@@ -105,7 +116,7 @@ Prompts stored in JSON are often **partly dynamic**: each template’s **`body`*
 
 - **Trigger:** Choosing a template that contains **at least one** `{{var}}` placeholder—via **double-click** or **Enter** on the list (same path as `onTemplateChosen` after `resolveTemplateFromClick` / `Platform.runLater`)—does **not** copy the raw body. **`MainViewModel.variablesFor`** delegates to **`VariableParser`** on the **live `body` text** from the selected `PromptTemplate` (values come from the persisted library / in-memory model—the placeholders are defined **in** the JSON `body`, not in a separate per-field schema).
 - **UI (same card, same light theme):** **`MainView`** opens a **modeless `Stage`** (owner = main) titled *Variables — …* with header *Fill variables for: …*, one **TextField** per variable, and **Copy — keep open** / **Copy & close**. The **main overlay stays visible** so the user can keep searching the list.
-- **Compilation:** **`MainViewModel.compile`** uses **`TemplateCompiler`** to substitute each placeholder with the text entered in the matching field (blank field → empty string).
+- **Compilation:** **`MainViewModel.compile`** uses **`TemplateCompiler`** to substitute each placeholder with the text entered in the matching field (blank field → empty string). Quoted substitution is optional via preferences.
 - **Actions:** **Copy & close** (default button) compiles, copies via **`ClipboardPort`**, closes the variables window, and **does not** hide the main overlay. **Copy — keep open** compiles and copies without closing the variables window. **`wireVariableEnter`:** **Enter** focuses the **next** field; **Enter** on the **last** field runs the same path as **Copy & close**.
 - **Escape:** With the variables window focused, **Escape** closes it (`closeVariableParametersWindow`) and focuses search; **Escape** on the main overlay follows existing hide behavior when the variables window is not open.
 - **Outcome:** The user fills values in the variables window, confirms with **Enter** or a button, and the **fully populated prompt** lands on the **system clipboard** for paste into an IDE, chat client, or ticket.
@@ -120,14 +131,14 @@ Prompts stored in JSON are often **partly dynamic**: each template’s **`body`*
 
 **Main window:** `PromptButlerApp` builds the scene root as a **`StackPane`**: inner **`MainView`** (`VBox` with style class **`app-panel`**) plus a small **south-east resize grip** (drag to resize). **`stage.setResizable(true)`** with min size **320×360**. **`StageStyle.TRANSPARENT`** removes the OS title bar; **`MainView`** implements **drag-to-move** on the top **Prompt Butler** strip (`installUndecoratedStageDrag`). Toolbar uses **Ikonli Font Awesome 5** icons + **tooltips**.
 
-**Toolbar (order):** New, Import, Export, **Data**, Quit (no global Edit / Delete / Copy). **Data** opens storage settings (`storage.json` pointer, directory chooser, clear pointer).
+**Toolbar (order):** New, Shortcuts, Import, Export, Settings, **Data**, Undo Delete, Quit.
 
 **List**
 
-- **Fuzzy search** bound to `MainViewModel` + `FuzzySearchService` (Levenshtein on title/tags; null tag entries skipped).
+- **Fuzzy search** bound to `MainViewModel` + `FuzzySearchService` with tiered text matching and relevance cutoff.
 - **Custom cells:** title + null-safe tag suffix; **per-row Copy** icon (does not open the detail popup; consumes click separately).
 - **Single primary-click** on a row (after a short delay so it is not a double-click): opens a **modal detail `Stage`** (`WINDOW_MODAL`, owner = main) with read-only internal id, body preview, **Copy / Edit / Delete / Close** (icons + tooltips). **Edit** closes the detail window and opens the same **save dialog** as **New**.
-- **New / Edit dialog:** Title, body, tags only — **no id field**. New templates use **`MainViewModel.allocateNewTemplateId()`** (random UUID, unique in library). Edits use **`replaceTemplateById`** (id unchanged).
+- **New / Edit dialog:** Title, body, tags, category — **no id field**. New templates use `allocateNewTemplateId()`. Edits keep id and append prior body into revision history when changed.
 - **Double-click:** **`resolveTemplateFromClick`**, **`Platform.runLater`** → `onTemplateChosen` (raw copy + hide if no placeholders; otherwise variable mode).
 - **Enter** (list focused, not search): same as double-click (deferred `onTemplateChosen`).
 
@@ -141,7 +152,9 @@ Prompts stored in JSON are often **partly dynamic**: each template’s **`body`*
 - **Double-click / Enter** with **no** `{{var}}` placeholders: **copy body + hide** via **`copyPlainTextThenMaybeHide(..., true)`** with **`PauseTransition`** delays.
 - **Double-click / Enter** with **one or more** `{{var}}` placeholders: **variables window** (see **§4**): **`TemplateCompiler`** output to clipboard; **Copy & close** closes the variables window and copies **without** hiding the main overlay; **Copy — keep open** copies only; **Enter** advances fields and commits on the last field as in §4.
 
-**Import:** Confirm replace-all; imported templates are wrapped with **fresh UUID ids** before **`replaceAllTemplates`**.
+**Import:** Confirm replace-all; imported templates are remapped to fresh UUID ids via `ImportExportService.remapImportedTemplates` before `replaceAllTemplates`. Drag/drop `.json` import is supported.
+
+**Export:** Exports selected templates when selection exists; otherwise exports the whole library.
 
 **Dialogs / alerts:** Light stylesheet on `DialogPane`; standard **OK/Cancel** (and error **OK**) get icon graphics where applicable.
 
@@ -173,7 +186,7 @@ Prompts stored in JSON are often **partly dynamic**: each template’s **`body`*
 ## 8. JSON schema (prompts store)
 
 - Root object: **`version`** (optional number), **`templates`** (required array).
-- Each template: **`id`**, **`title`**, **`body`** (strings), **`tags`** (array of strings). **Strict:** unknown fields rejected (`JsonSchemaValidator`).
+- Each template: `id`, `title`, `body` (strings), `tags` (array of strings), optional `favorite` (bool), `category` (string), `usageCount` (number), `lastUsedEpochMillis` (number), and `revisions` (array of `{body, updatedAtEpochMillis}`).
 - Placeholders: **`{{varName}}`** with `varName` matching **`[a-zA-Z0-9_-]+`** (`VariableParser` / `TemplateCompiler`).
 
 ---
@@ -190,11 +203,11 @@ Prompts stored in JSON are often **partly dynamic**: each template’s **`body`*
 
 ## 10. Suggested next steps (optional backlog)
 
-- Persist **toolbar / UX** preferences beyond `preferences.json` if needed.
+- Add UI for **hotkey customization** (model/persistence already supports keycode+modifier fields).
+- Add revision **restore/diff UX** from persisted template history.
 - **Installer** / jlink / jpackage (not present).
-- **Deeper keyboard** focus model (e.g. explicit focus policy between search vs list).
 - **Internationalization** (all strings English today).
-- **E2E** or UI tests (not present; only unit tests).
+- **E2E** or richer JavaFX UI tests (current coverage is still primarily unit-level).
 
 ---
 

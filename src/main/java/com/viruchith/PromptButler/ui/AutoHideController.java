@@ -9,6 +9,7 @@ import javafx.application.Platform;
 import javafx.beans.value.ChangeListener;
 import javafx.beans.value.ObservableValue;
 import javafx.stage.Stage;
+import javafx.stage.Window;
 
 import java.awt.*;
 import java.util.Objects;
@@ -19,6 +20,7 @@ import java.util.function.Consumer;
  * from {@link UserPreferences} (reduce opacity, minimize, hide to tray, or hide completely).
  */
 public final class AutoHideController {
+    public static final String SUSPEND_AUTO_HIDE_KEY = "promptButler.suspendAutoHide";
 
     private final Stage stage;
     private final UserPreferences preferences;
@@ -52,6 +54,14 @@ public final class AutoHideController {
     }
 
     private void applyDefocus() {
+        if (Boolean.TRUE.equals(stage.getProperties().get(SUSPEND_AUTO_HIDE_KEY))) {
+            return;
+        }
+        // Opening app-owned dialogs/windows (Settings, confirmations, variable form) shifts focus away
+        // from the main stage; do not auto-hide in that case.
+        if (isOwnedChildWindowFocused()) {
+            return;
+        }
         AutoHideMode mode = preferences.getAutoHideMode();
         switch (mode) {
             case OPACITY:
@@ -85,5 +95,35 @@ public final class AutoHideController {
             default:
                 break;
         }
+    }
+
+    private boolean isOwnedChildWindowFocused() {
+        for (Window window : Window.getWindows()) {
+            if (!(window instanceof Stage)) {
+                continue;
+            }
+            Stage candidate = (Stage) window;
+            if (candidate == stage || !candidate.isShowing() || !candidate.isFocused()) {
+                continue;
+            }
+            if (isOwnedByMainStage(candidate)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean isOwnedByMainStage(Stage candidate) {
+        Window owner = candidate.getOwner();
+        while (owner != null) {
+            if (owner == stage) {
+                return true;
+            }
+            if (!(owner instanceof Stage)) {
+                return false;
+            }
+            owner = ((Stage) owner).getOwner();
+        }
+        return false;
     }
 }
