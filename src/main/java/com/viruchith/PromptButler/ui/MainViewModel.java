@@ -18,9 +18,11 @@ import javafx.collections.ObservableList;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -43,12 +45,23 @@ public final class MainViewModel {
     private final StringProperty searchText = new SimpleStringProperty("");
     private final ObjectProperty<PromptTemplate> selectedTemplate = new SimpleObjectProperty<PromptTemplate>();
 
+    /** O(1) lookup index for template IDs — kept in sync with masterList mutations. */
+    private final Set<String> idIndex = new HashSet<>();
+
     public MainViewModel(PromptRepository repository, List<PromptTemplate> initial) {
         this.repository = Objects.requireNonNull(repository, "repository");
         Objects.requireNonNull(initial, "initial");
         this.masterList.setAll(initial);
+        rebuildIdIndex();
         this.searchText.addListener((obs, o, n) -> refreshFilter());
         refreshFilter();
+    }
+
+    private void rebuildIdIndex() {
+        idIndex.clear();
+        for (PromptTemplate p : masterList) {
+            idIndex.add(p.getId());
+        }
     }
 
     public StringProperty searchTextProperty() {
@@ -83,6 +96,7 @@ public final class MainViewModel {
 
     public void replaceAllTemplates(List<PromptTemplate> next) throws IOException {
         masterList.setAll(next);
+        rebuildIdIndex();
         repository.saveAll(new ArrayList<PromptTemplate>(masterList));
         refreshFilter();
     }
@@ -121,12 +135,7 @@ public final class MainViewModel {
         if (needle.isEmpty()) {
             return false;
         }
-        for (PromptTemplate p : masterList) {
-            if (needle.equals(p.getId())) {
-                return true;
-            }
-        }
-        return false;
+        return idIndex.contains(needle);
     }
 
     /**
@@ -138,6 +147,7 @@ public final class MainViewModel {
             throw new IllegalArgumentException("A prompt with this id already exists: " + template.getId());
         }
         masterList.add(template);
+        idIndex.add(template.getId());
         persist();
         refreshFilter();
     }
@@ -150,6 +160,7 @@ public final class MainViewModel {
             return;
         }
         masterList.remove(template);
+        idIndex.remove(template.getId());
         persist();
         refreshFilter();
     }
@@ -174,6 +185,11 @@ public final class MainViewModel {
         throw new IllegalArgumentException("No template with id: " + idNorm);
     }
 
+    /** Returns the total number of templates in the library. */
+    public int getTemplateCount() {
+        return masterList.size();
+    }
+
     /**
      * Allocates a new random UUID string that is not already used in the master list.
      */
@@ -183,5 +199,16 @@ public final class MainViewModel {
             id = UUID.randomUUID().toString();
         } while (idExists(id));
         return id;
+    }
+
+    /**
+     * Toggles the favorite status of the given template and persists.
+     */
+    public void toggleFavorite(PromptTemplate template) throws IOException {
+        Objects.requireNonNull(template, "template");
+        PromptTemplate toggled = new PromptTemplate(
+                template.getId(), template.getTitle(), template.getBody(),
+                template.getTags(), !template.isFavorite());
+        replaceTemplateById(template.getId(), toggled);
     }
 }

@@ -58,7 +58,7 @@ public final class JsonPromptRepository implements PromptRepository {
                 continue;
             }
             List<String> tags = t.tags == null ? Collections.<String>emptyList() : t.tags;
-            out.add(new PromptTemplate(t.id, t.title, t.body, tags));
+            out.add(new PromptTemplate(t.id, t.title, t.body, tags, t.favorite));
         }
         return out;
     }
@@ -75,6 +75,7 @@ public final class JsonPromptRepository implements PromptRepository {
             td.title = p.getTitle();
             td.body = p.getBody();
             td.tags = new ArrayList<String>(p.getTags());
+            td.favorite = p.isFavorite();
             dto.templates.add(td);
         }
         String json = GSON.toJson(dto);
@@ -98,7 +99,7 @@ public final class JsonPromptRepository implements PromptRepository {
                 continue;
             }
             List<String> tags = t.tags == null ? Collections.<String>emptyList() : t.tags;
-            out.add(new PromptTemplate(t.id, t.title, t.body, tags));
+            out.add(new PromptTemplate(t.id, t.title, t.body, tags, t.favorite));
         }
         return out;
     }
@@ -131,5 +132,6 @@ public final class JsonPromptRepository implements PromptRepository {
         String title;
         String body;
         List<String> tags;
+        boolean favorite;
     }
 }
