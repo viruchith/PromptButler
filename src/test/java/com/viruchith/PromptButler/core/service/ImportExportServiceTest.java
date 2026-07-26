@@ -8,10 +8,12 @@ import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ImportExportServiceTest {
 
@@ -41,5 +43,24 @@ class ImportExportServiceTest {
     @Test
     void importRejectsNonFile(@TempDir Path dir) {
         assertThrows(Exception.class, () -> service.importFromFile(dir));
+    }
+
+    @Test
+    void remapImportedTemplatesAssignsNewIds() {
+        List<PromptTemplate> imported = Arrays.asList(
+                new PromptTemplate("old-1", "T1", "b1", java.util.Collections.emptyList()),
+                new PromptTemplate("old-2", "T2", "b2", java.util.Collections.emptyList()));
+        List<PromptTemplate> remapped = service.remapImportedTemplates(imported, new java.util.function.Supplier<String>() {
+            private int i = 0;
+            @Override
+            public String get() {
+                i++;
+                return "new-" + i;
+            }
+        });
+        assertEquals(2, remapped.size());
+        assertEquals("new-1", remapped.get(0).getId());
+        assertEquals("new-2", remapped.get(1).getId());
+        assertTrue(remapped.stream().noneMatch(p -> p.getId().startsWith("old-")));
     }
 }

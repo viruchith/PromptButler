@@ -34,6 +34,7 @@ import java.util.UUID;
  * </p>
  */
 public final class MainViewModel {
+    private static final String GENERAL_CATEGORY = "General";
 
     private final PromptRepository repository;
     private final FuzzySearchService fuzzySearchService = new FuzzySearchService();
@@ -43,6 +44,7 @@ public final class MainViewModel {
     private final ObservableList<PromptTemplate> masterList = FXCollections.observableArrayList();
     private final ObservableList<PromptTemplate> filteredList = FXCollections.observableArrayList();
     private final StringProperty searchText = new SimpleStringProperty("");
+    private final StringProperty categoryFilter = new SimpleStringProperty("All");
     private final ObjectProperty<PromptTemplate> selectedTemplate = new SimpleObjectProperty<PromptTemplate>();
 
     /** O(1) lookup index for template IDs — kept in sync with masterList mutations. */
@@ -54,6 +56,7 @@ public final class MainViewModel {
         this.masterList.setAll(initial);
         rebuildIdIndex();
         this.searchText.addListener((obs, o, n) -> refreshFilter());
+        this.categoryFilter.addListener((obs, o, n) -> refreshFilter());
         refreshFilter();
     }
 
@@ -90,7 +93,18 @@ public final class MainViewModel {
 
     public void refreshFilter() {
         String q = InputText.trimToEmpty(searchText.get());
-        List<PromptTemplate> ranked = fuzzySearchService.rank(q, new ArrayList<PromptTemplate>(masterList));
+        String category = InputText.trimToEmpty(categoryFilter.get());
+        ArrayList<PromptTemplate> base = new ArrayList<PromptTemplate>();
+        if (category.isEmpty() || "All".equalsIgnoreCase(category)) {
+            base.addAll(masterList);
+        } else {
+            for (PromptTemplate template : masterList) {
+                if (category.equalsIgnoreCase(template.getCategory())) {
+                    base.add(template);
+                }
+            }
+        }
+        List<PromptTemplate> ranked = fuzzySearchService.rank(q, base);
         filteredList.setAll(ranked);
     }
 
@@ -113,12 +127,12 @@ public final class MainViewModel {
         return variableParser.parseOrderedUniqueVariables(t.getBody());
     }
 
-    /**
-     * Compiles {@code t.getBody()} with the given variable values; each substituted value appears wrapped in
-     * ASCII double quotes (with {@code \} and {@code "} escaped) in the result string.
-     */
     public String compile(PromptTemplate t, Map<String, String> values) {
-        return templateCompiler.compile(t.getBody(), values);
+        return templateCompiler.compile(t.getBody(), values, false);
+    }
+
+    public String compile(PromptTemplate t, Map<String, String> values, boolean quoteValues) {
+        return templateCompiler.compile(t.getBody(), values, quoteValues);
     }
 
     public Map<String, String> emptyVariableMap(PromptTemplate t) {
@@ -185,6 +199,12 @@ public final class MainViewModel {
         throw new IllegalArgumentException("No template with id: " + idNorm);
     }
 
+    public void reloadFromDisk(List<PromptTemplate> templates) {
+        masterList.setAll(templates);
+        rebuildIdIndex();
+        refreshFilter();
+    }
+
     /** Returns the total number of templates in the library. */
     public int getTemplateCount() {
         return masterList.size();
@@ -206,9 +226,89 @@ public final class MainViewModel {
      */
     public void toggleFavorite(PromptTemplate template) throws IOException {
         Objects.requireNonNull(template, "template");
-        PromptTemplate toggled = new PromptTemplate(
-                template.getId(), template.getTitle(), template.getBody(),
-                template.getTags(), !template.isFavorite());
+        PromptTemplate toggled = template.withFavorite(!template.isFavorite());
         replaceTemplateById(template.getId(), toggled);
+    }
+
+    public PromptTemplate duplicateTemplate(PromptTemplate template) throws IOException {
+        Objects.requireNonNull(template, "template");
+        PromptTemplate duplicated = template.withDuplicatedId(
+                allocateNewTemplateId(),
+                template.getTitle() + " (copy)");
+        addTemplate(duplicated);
+        return duplicated;
+    }
+
+    public void markTemplateUsed(PromptTemplate template) throws IOException {
+        if (template == null) {
+            return;
+        }
+        PromptTemplate used = template.withUsageNow(System.currentTimeMillis());
+        replaceTemplateById(template.getId(), used);
+    }
+
+    public PromptTemplate editTemplate(PromptTemplate existing, String title, String body, List<String> tags, String category) throws IOException {
+        Objects.requireNonNull(existing, "existing");
+        PromptTemplate updated = existing.withEditedContent(title, body, tags, category);
+        replaceTemplateById(existing.getId(), updated);
+        return updated;
+    }
+
+    public void restoreDeletedTemplate(PromptTemplate deleted) throws IOException {
+        if (deleted == null) {
+            return;
+        }
+        if (!idExists(deleted.getId())) {
+            addTemplate(deleted);
+        }
+    }
+
+    public List<String> getKnownCategories() {
+        ArrayList<String> categories = new ArrayList<String>();
+        categories.add("All");
+        for (PromptTemplate template : masterList) {
+            String category = template.getCategory();
+            if (!categories.contains(category)) {
+                categories.add(category);
+            }
+        }
+        return categories;
+    }
+
+    public int deleteCategoryAndReassignToGeneral(String categoryToDelete) throws IOException {
+        String target = InputText.trimToEmpty(categoryToDelete);
+        if (target.isEmpty() || "all".equalsIgnoreCase(target) || GENERAL_CATEGORY.equalsIgnoreCase(target)) {
+            return 0;
+        }
+        int changed = 0;
+        ArrayList<PromptTemplate> next = new ArrayList<PromptTemplate>(masterList.size());
+        for (PromptTemplate template : masterList) {
+            if (target.equalsIgnoreCase(template.getCategory())) {
+                PromptTemplate reassigned = new PromptTemplate(
+                        template.getId(),
+                        template.getTitle(),
+                        template.getBody(),
+                        template.getTags(),
+                        template.isFavorite(),
+                        GENERAL_CATEGORY,
+                        template.getUsageCount(),
+                        template.getLastUsedEpochMillis(),
+                        template.getRevisions());
+                next.add(reassigned);
+                changed++;
+            } else {
+                next.add(template);
+            }
+        }
+        if (changed > 0) {
+            masterList.setAll(next);
+            persist();
+            refreshFilter();
+        }
+        return changed;
+    }
+
+    public StringProperty categoryFilterProperty() {
+        return categoryFilter;
     }
 }

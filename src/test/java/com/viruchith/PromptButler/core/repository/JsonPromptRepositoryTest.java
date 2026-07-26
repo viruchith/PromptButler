@@ -26,13 +26,18 @@ class JsonPromptRepositoryTest {
         Path f = dir.resolve("prompts.json");
         JsonPromptRepository repo = new JsonPromptRepository(f, validator);
         List<PromptTemplate> data = Arrays.asList(
-                new PromptTemplate("a", "Title A", "body {{x}}", Arrays.asList("t1")),
+                new PromptTemplate("a", "Title A", "body {{x}}", Arrays.asList("t1"), true, "Development", 3L, 10L,
+                        Arrays.asList(new PromptTemplate.Revision("old body", 5L))),
                 new PromptTemplate("b", "Title B", "plain", Arrays.asList())
         );
         repo.saveAll(data);
         List<PromptTemplate> loaded = repo.loadAll();
         assertEquals(2, loaded.size());
         assertTrue(loaded.stream().anyMatch(p -> "Title A".equals(p.getTitle())));
+        PromptTemplate a = loaded.stream().filter(p -> "a".equals(p.getId())).findFirst().orElseThrow();
+        assertEquals("Development", a.getCategory());
+        assertEquals(3L, a.getUsageCount());
+        assertEquals(1, a.getRevisions().size());
     }
 
     @Test
@@ -45,10 +50,11 @@ class JsonPromptRepositoryTest {
 
     @Test
     void parseValidatedReader() throws Exception {
-        String json = "{\"version\":1,\"templates\":[{\"id\":\"1\",\"title\":\"t\",\"body\":\"b\",\"tags\":[]}]}";
+        String json = "{\"version\":1,\"templates\":[{\"id\":\"1\",\"title\":\"t\",\"body\":\"b\",\"tags\":[],\"category\":\"General\",\"usageCount\":2,\"lastUsedEpochMillis\":11}]}";
         List<PromptTemplate> list = JsonPromptRepository.parseValidatedReader(
                 new InputStreamReader(new ByteArrayInputStream(json.getBytes(StandardCharsets.UTF_8)), StandardCharsets.UTF_8),
                 validator);
         assertEquals(1, list.size());
+        assertEquals(2L, list.get(0).getUsageCount());
     }
 }

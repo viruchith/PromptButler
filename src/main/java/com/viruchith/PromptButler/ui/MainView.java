@@ -3,7 +3,9 @@ package com.viruchith.PromptButler.ui;
 // SPDX-License-Identifier: GPL-3.0-only
 
 import com.viruchith.PromptButler.core.clipboard.ClipboardPort;
+import com.viruchith.PromptButler.core.model.AutoHideMode;
 import com.viruchith.PromptButler.core.model.PromptTemplate;
+import com.viruchith.PromptButler.core.model.UserPreferences;
 import com.viruchith.PromptButler.core.service.ImportExportService;
 import com.viruchith.PromptButler.core.storage.StoragePaths;
 import com.viruchith.PromptButler.core.util.InputText;
@@ -17,12 +19,16 @@ import javafx.scene.Scene;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.ButtonType;
+import javafx.scene.control.CheckBox;
+import javafx.scene.control.ComboBox;
 import javafx.scene.control.Dialog;
 import javafx.scene.control.DialogPane;
 import javafx.scene.control.Hyperlink;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
+import javafx.scene.control.SelectionMode;
+import javafx.scene.control.TextInputDialog;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
 import javafx.scene.control.Tooltip;
@@ -38,6 +44,7 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
+import javafx.scene.paint.Color;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
@@ -55,10 +62,12 @@ import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Consumer;
 
 /**
  * Primary JavaFX UI for the overlay: search, template list, toolbar, and auxiliary {@link Stage}s
@@ -80,14 +89,19 @@ import java.util.Optional;
 public final class MainView extends VBox {
 
     /** Base light theme (dialogs do not inherit the main scene stylesheet). */
-    private static final String LIGHT_STYLESHEET_URL = stylesheetUrl();
+    private static final String LIGHT_STYLESHEET_URL = stylesheetUrl("/styles/overlay.css");
+    private static final String DARK_STYLESHEET_URL = stylesheetUrl("/styles/overlay-dark.css");
 
     private final Stage stage;
     private final MainViewModel viewModel;
     private final ClipboardPort clipboard;
     private final ImportExportService importExportService;
+    private final UserPreferences preferences;
+    private final Consumer<UserPreferences> preferencesSaver;
+    private final Consumer<Boolean> themeSwitcher;
 
     private final TextField searchField = new TextField();
+    private final ComboBox<String> categoryFilter = new ComboBox<String>();
     private final ListView<PromptTemplate> listView = new ListView<PromptTemplate>();
     private final VBox listSection = new VBox(6);
     private final HBox toolbar = new HBox(8);
@@ -99,9 +113,12 @@ public final class MainView extends VBox {
     private Stage promptDetailStage;
     /** Modeless window for {{variable}} fill-in; user can keep using the main window. */
     private Stage variableParamsStage;
+    private boolean categoryFilterUpdating;
 
     /** About / help window (single instance while open). */
     private Stage aboutStage;
+    private PromptTemplate lastDeletedTemplate;
+    private Button undoDeleteButton;
 
     private PromptTemplate variableTarget;
     private final List<TextArea> variableFields = new ArrayList<TextArea>();
@@ -110,12 +127,18 @@ public final class MainView extends VBox {
             Stage stage,
             MainViewModel viewModel,
             ClipboardPort clipboard,
-            ImportExportService importExportService) {
+            ImportExportService importExportService,
+            UserPreferences preferences,
+            Consumer<UserPreferences> preferencesSaver,
+            Consumer<Boolean> themeSwitcher) {
         super(10);
         this.stage = Objects.requireNonNull(stage, "stage");
         this.viewModel = Objects.requireNonNull(viewModel, "viewModel");
         this.clipboard = Objects.requireNonNull(clipboard, "clipboard");
         this.importExportService = Objects.requireNonNull(importExportService, "importExportService");
+        this.preferences = Objects.requireNonNull(preferences, "preferences");
+        this.preferencesSaver = Objects.requireNonNull(preferencesSaver, "preferencesSaver");
+        this.themeSwitcher = Objects.requireNonNull(themeSwitcher, "themeSwitcher");
         configureSearch();
         configureList();
         configureToolbar();
@@ -140,11 +163,15 @@ public final class MainView extends VBox {
         titleBar.setCursor(Cursor.MOVE);
         installUndecoratedStageDrag(titleBar, stage);
         statusLabel.getStyleClass().add("hint-label");
+        statusLabel.getStyleClass().add("toast-label");
         statusLabel.setMinHeight(18);
-        listSection.getChildren().addAll(searchField, listView, toolbar, statusLabel);
+        listSection.getChildren().addAll(new HBox(8, searchField, categoryFilter), listView, toolbar, statusLabel);
         getChildren().addAll(titleBar, listSection);
         VBox.setVgrow(listSection, Priority.ALWAYS);
         VBox.setVgrow(listView, Priority.ALWAYS);
+        configureCategoryFilter();
+        configureDragAndDropImport();
+        showTemplateCount();
     }
 
     /* ----- Title bar: icon + undecorated window drag ----- */
@@ -231,7 +258,7 @@ public final class MainView extends VBox {
         String implVer = MainView.class.getPackage() != null
                 ? MainView.class.getPackage().getImplementationVersion()
                 : null;
-        String versionLine = (implVer == null || implVer.isEmpty()) ? "0.2.0-SNAPSHOT" : implVer;
+        String versionLine = (implVer == null || implVer.isEmpty()) ? "0.4.0-SNAPSHOT" : implVer;
         Label version = new Label("Version " + versionLine);
         version.getStyleClass().add("preview-label");
 
@@ -299,10 +326,62 @@ public final class MainView extends VBox {
         });
     }
 
+    private void configureCategoryFilter() {
+        categoryFilter.setPromptText("Category");
+        refreshCategories();
+        categoryFilter.valueProperty().addListener((obs, oldValue, newValue) -> {
+            if (categoryFilterUpdating) {
+                return;
+            }
+            viewModel.categoryFilterProperty().set(newValue == null ? "All" : newValue);
+        });
+    }
+
+    private void refreshCategories() {
+        String selected = InputText.trimToEmpty(viewModel.categoryFilterProperty().get());
+        if (selected.isEmpty()) {
+            selected = "All";
+        }
+        categoryFilterUpdating = true;
+        try {
+            categoryFilter.getItems().setAll(viewModel.getKnownCategories());
+            if (categoryFilter.getItems().contains(selected)) {
+                categoryFilter.getSelectionModel().select(selected);
+            } else {
+                viewModel.categoryFilterProperty().set("All");
+                categoryFilter.getSelectionModel().select("All");
+            }
+        } finally {
+            categoryFilterUpdating = false;
+        }
+    }
+
+    private void configureDragAndDropImport() {
+        listSection.setOnDragOver(event -> {
+            if (event.getGestureSource() != listSection
+                    && event.getDragboard().hasFiles()
+                    && event.getDragboard().getFiles().size() == 1
+                    && event.getDragboard().getFiles().get(0).getName().toLowerCase().endsWith(".json")) {
+                event.acceptTransferModes(javafx.scene.input.TransferMode.COPY);
+            }
+            event.consume();
+        });
+        listSection.setOnDragDropped(event -> {
+            boolean success = false;
+            if (event.getDragboard().hasFiles() && !event.getDragboard().getFiles().isEmpty()) {
+                File file = event.getDragboard().getFiles().get(0);
+                success = importFromPath(file.toPath());
+            }
+            event.setDropCompleted(success);
+            event.consume();
+        });
+    }
+
     /* ----- List: fuzzy-filtered items, row copy, single-/double-click semantics ----- */
 
     private void configureList() {
         listView.setItems(viewModel.getFilteredList());
+        listView.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
         singleClickDetailTimer = new PauseTransition(Duration.millis(320));
         singleClickDetailTimer.setOnFinished(ev -> {
             PromptTemplate t = pendingSingleClickTemplate;
@@ -342,7 +421,9 @@ public final class MainView extends VBox {
                         } else {
                             setText(null);
                             String prefix = item.isFavorite() ? "\u2605 " : "";
-                            titleLabel.setText(prefix + item.getTitle() + formatTagsSuffixForCell(item.getTags()));
+                            titleLabel.setText(prefix + item.getTitle()
+                                    + " {" + item.getCategory() + "}"
+                                    + PromptTextFormatter.formatTagsSuffixForCell(item.getTags()));
                             rowCopy.setOnAction(ev -> {
                                 ev.consume();
                                 copyTemplateBodyToClipboard(item, false);
@@ -422,19 +503,29 @@ public final class MainView extends VBox {
         Button newBtn = new Button("New");
         styleToolbarButton(newBtn, FontAwesomeSolid.PLUS, "Create a new prompt (id is assigned automatically).");
         newBtn.setOnAction(e -> showPromptEditorDialog(null));
+        Button shortcutsBtn = new Button("Shortcuts");
+        styleToolbarButton(shortcutsBtn, FontAwesomeSolid.KEYBOARD, "Show keyboard shortcuts.");
+        shortcutsBtn.setOnAction(e -> showShortcutsDialog());
         Button importBtn = new Button("Import");
         styleToolbarButton(importBtn, FontAwesomeSolid.FILE_IMPORT, "Replace the library from a JSON file (ids are reassigned).");
         importBtn.setOnAction(e -> onImport());
         Button exportBtn = new Button("Export");
-        styleToolbarButton(exportBtn, FontAwesomeSolid.FILE_EXPORT, "Save all prompts to a JSON file.");
+        styleToolbarButton(exportBtn, FontAwesomeSolid.FILE_EXPORT, "Save selected prompts (or all prompts) to JSON.");
         exportBtn.setOnAction(e -> onExport());
+        Button settingsBtn = new Button("Settings");
+        styleToolbarButton(settingsBtn, FontAwesomeSolid.COG, "Edit preferences including dark mode and compile behavior.");
+        settingsBtn.setOnAction(e -> showSettingsDialog());
         Button dataBtn = new Button("Data Folder");
         styleToolbarButton(dataBtn, FontAwesomeSolid.FOLDER_OPEN, "Choose where prompts.json and preferences.json are stored (restart required after change).");
         dataBtn.setOnAction(e -> onDataFolderSettings());
+        undoDeleteButton = new Button("Undo Delete");
+        styleToolbarButton(undoDeleteButton, FontAwesomeSolid.UNDO, "Restore the most recently deleted prompt.");
+        undoDeleteButton.setDisable(true);
+        undoDeleteButton.setOnAction(e -> undoLastDelete());
         Button quit = new Button("Quit");
         styleToolbarButton(quit, FontAwesomeSolid.SIGN_OUT_ALT, "Exit the application.");
         quit.setOnAction(e -> System.exit(0));
-        toolbar.getChildren().addAll(newBtn, importBtn, exportBtn, dataBtn, quit);
+        toolbar.getChildren().addAll(newBtn, shortcutsBtn, importBtn, exportBtn, settingsBtn, dataBtn, undoDeleteButton, quit);
     }
 
     private void onDataFolderSettings() {
@@ -516,6 +607,129 @@ public final class MainView extends VBox {
         a.showAndWait();
     }
 
+    private void showShortcutsDialog() {
+        Alert a = new Alert(Alert.AlertType.INFORMATION);
+        a.initOwner(stage);
+        attachLightDialogStyles(a.getDialogPane());
+        a.setHeaderText("Keyboard shortcuts");
+        a.setContentText(
+                "Ctrl/Cmd+C (list focused): copy selected prompt body\n"
+                        + "Enter: open selected prompt or variable form\n"
+                        + "Ctrl/Cmd+Enter in variable form: next field / copy on last\n"
+                        + "Up/Down: navigate list\n"
+                        + "Escape: close variable window or hide overlay\n"
+                        + "Global: Ctrl+Alt+P (Win/Linux) or Cmd+Alt+P (macOS)");
+        styleStandardAlertButtons(a.getDialogPane());
+        a.showAndWait();
+    }
+
+    private void showSettingsDialog() {
+        stage.getProperties().put(AutoHideController.SUSPEND_AUTO_HIDE_KEY, Boolean.TRUE);
+        try {
+        Dialog<ButtonType> dialog = new Dialog<ButtonType>();
+        dialog.initOwner(stage);
+        dialog.setTitle("Settings");
+        dialog.setHeaderText("Preferences");
+        dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+
+        CheckBox darkMode = new CheckBox("Enable dark mode");
+        darkMode.setSelected(preferences.isDarkMode());
+        CheckBox quoteVars = new CheckBox("Wrap compiled {{variables}} in quotes");
+        quoteVars.setSelected(preferences.isQuoteCompiledVariables());
+
+        ComboBox<AutoHideMode> autoHideMode = new ComboBox<>();
+        autoHideMode.getItems().setAll(AutoHideMode.values());
+        autoHideMode.getSelectionModel().select(preferences.getAutoHideMode());
+
+        TextField categoryField = new TextField(preferences.getDefaultCategory());
+        categoryField.setPromptText("Default category");
+        ComboBox<String> deleteCategoryDropdown = new ComboBox<String>();
+        deleteCategoryDropdown.setMaxWidth(Double.MAX_VALUE);
+        refreshDeleteCategoryDropdown(deleteCategoryDropdown);
+        Button deleteCategoryButton = new Button("Delete Category");
+        styleToolbarButton(deleteCategoryButton, FontAwesomeSolid.TRASH_ALT, "Delete selected category and move prompts to General.");
+        deleteCategoryButton.setOnAction(e -> {
+            String selectedCategory = deleteCategoryDropdown.getSelectionModel().getSelectedItem();
+            if (selectedCategory == null || selectedCategory.trim().isEmpty()) {
+                showError("Validation", "Choose a category to delete.");
+                return;
+            }
+            Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
+            confirm.initOwner(stage);
+            attachLightDialogStyles(confirm.getDialogPane());
+            styleStandardAlertButtons(confirm.getDialogPane());
+            confirm.setHeaderText("Delete category \"" + selectedCategory + "\"?");
+            confirm.setContentText("All prompts in this category will be reassigned to General.");
+            Optional<ButtonType> result = confirm.showAndWait();
+            if (!result.isPresent() || result.get() != ButtonType.OK) {
+                return;
+            }
+            try {
+                int affected = viewModel.deleteCategoryAndReassignToGeneral(selectedCategory);
+                if (selectedCategory.equalsIgnoreCase(preferences.getDefaultCategory())) {
+                    preferences.setDefaultCategory("General");
+                    categoryField.setText("General");
+                    preferencesSaver.accept(preferences);
+                }
+                refreshCategories();
+                refreshDeleteCategoryDropdown(deleteCategoryDropdown);
+                showTemplateCount();
+                showToast("Deleted category \"" + selectedCategory + "\". Reassigned " + affected + " prompt(s) to General.", 3.5);
+            } catch (Exception ex) {
+                showError("Could not delete category", messageOrClass(ex));
+            }
+        });
+        HBox deleteCategoryRow = new HBox(8, deleteCategoryDropdown, deleteCategoryButton);
+        HBox.setHgrow(deleteCategoryDropdown, Priority.ALWAYS);
+
+        GridPane grid = new GridPane();
+        grid.setHgap(10);
+        grid.setVgap(8);
+        grid.add(darkMode, 0, 0, 2, 1);
+        grid.add(quoteVars, 0, 1, 2, 1);
+        grid.add(new Label("Auto-hide mode"), 0, 2);
+        grid.add(autoHideMode, 1, 2);
+        grid.add(new Label("Default category"), 0, 3);
+        grid.add(categoryField, 1, 3);
+        grid.add(new Label("Delete category"), 0, 4);
+        grid.add(deleteCategoryRow, 1, 4);
+        dialog.getDialogPane().setContent(grid);
+        attachLightDialogStyles(dialog.getDialogPane());
+
+        Optional<ButtonType> result = dialog.showAndWait();
+        if (!result.isPresent() || result.get() != ButtonType.OK) {
+            return;
+        }
+
+        preferences.setDarkMode(darkMode.isSelected());
+        preferences.setQuoteCompiledVariables(quoteVars.isSelected());
+        preferences.setAutoHideMode(autoHideMode.getSelectionModel().getSelectedItem());
+        preferences.setDefaultCategory(categoryField.getText());
+        preferencesSaver.accept(preferences);
+        themeSwitcher.accept(Boolean.valueOf(preferences.isDarkMode()));
+        showToast("Settings updated.", 2.5);
+        } finally {
+            stage.getProperties().remove(AutoHideController.SUSPEND_AUTO_HIDE_KEY);
+        }
+    }
+
+    private void undoLastDelete() {
+        if (lastDeletedTemplate == null) {
+            return;
+        }
+        try {
+            viewModel.restoreDeletedTemplate(lastDeletedTemplate);
+            listView.getSelectionModel().select(lastDeletedTemplate);
+            showToast("Delete undone.", 2.5);
+            lastDeletedTemplate = null;
+            undoDeleteButton.setDisable(true);
+            refreshCategories();
+            showTemplateCount();
+        } catch (Exception ex) {
+            showError("Could not restore prompt", messageOrClass(ex));
+        }
+    }
+
     private static String messageOrClass(Throwable ex) {
         if (ex == null) {
             return "Unknown error";
@@ -540,6 +754,11 @@ public final class MainView extends VBox {
     }
 
     private void handleKey(KeyEvent event) {
+        if (event.getCode() == KeyCode.F1) {
+            showShortcutsDialog();
+            event.consume();
+            return;
+        }
         if (event.getCode() == KeyCode.ESCAPE) {
             if (isVariableParametersWindowOpen()) {
                 closeVariableParametersWindow();
@@ -605,6 +824,27 @@ public final class MainView extends VBox {
         });
     }
 
+    public void reloadTemplatesFromDisk(List<PromptTemplate> templates) {
+        viewModel.reloadFromDisk(templates);
+        refreshCategories();
+        showTemplateCount();
+    }
+
+    public void applyUpdatedPreferences(UserPreferences latestPreferences) {
+        preferences.setAutoHideMode(latestPreferences.getAutoHideMode());
+        preferences.setDefocusOpacity(latestPreferences.getDefocusOpacity());
+        preferences.setDarkMode(latestPreferences.isDarkMode());
+        preferences.setHotkeyKeyCode(latestPreferences.getHotkeyKeyCode());
+        preferences.setHotkeyModifiers(latestPreferences.getHotkeyModifiers());
+        preferences.setQuoteCompiledVariables(latestPreferences.isQuoteCompiledVariables());
+        preferences.setDefaultCategory(latestPreferences.getDefaultCategory());
+        preferences.setWindowX(latestPreferences.getWindowX());
+        preferences.setWindowY(latestPreferences.getWindowY());
+        preferences.setWindowWidth(latestPreferences.getWindowWidth());
+        preferences.setWindowHeight(latestPreferences.getWindowHeight());
+        themeSwitcher.accept(Boolean.valueOf(preferences.isDarkMode()));
+    }
+
     /**
      * Invoked after double-click or Enter on a row: either copies raw body and hides overlay, or opens the
      * modeless variable window when the template body contains {@code {{placeholders}}}.
@@ -613,6 +853,7 @@ public final class MainView extends VBox {
         List<String> vars = viewModel.variablesFor(t);
         if (vars.isEmpty()) {
             copyToClipboardAndHide(t.getBody());
+            markUsedSafely(t);
             return;
         }
         openVariableParametersWindow(t, vars);
@@ -656,6 +897,7 @@ public final class MainView extends VBox {
             String compiled = compileVariableFormPayload();
             if (compiled != null) {
                 copyPlainTextThenMaybeHide(compiled, false);
+                markUsedSafely(variableTarget);
             }
         });
         HBox actions = new HBox(8, copyKeep, done);
@@ -716,6 +958,7 @@ public final class MainView extends VBox {
         if (compiled != null) {
             closeVariableParametersWindow();
             copyPlainTextThenMaybeHide(compiled, false);
+            markUsedSafely(variableTarget);
         }
     }
 
@@ -728,7 +971,7 @@ public final class MainView extends VBox {
             String key = (String) ta.getUserData();
             values.put(key, InputText.trimToEmpty(ta.getText()));
         }
-        return viewModel.compile(variableTarget, values);
+        return viewModel.compile(variableTarget, values, preferences.isQuoteCompiledVariables());
     }
 
     private void closeVariableParametersWindow() {
@@ -773,11 +1016,26 @@ public final class MainView extends VBox {
             return;
         }
         copyPlainTextThenMaybeHide(t.getBody(), hideAfter);
+        markUsedSafely(t);
+    }
+
+    private void markUsedSafely(PromptTemplate template) {
+        try {
+            viewModel.markTemplateUsed(template);
+            showTemplateCount();
+        } catch (Exception ex) {
+            showError("Could not update usage", messageOrClass(ex));
+        }
     }
 
     private void showCopiedStatus() {
-        statusLabel.setText("Copied to clipboard.");
-        PauseTransition clear = new PauseTransition(Duration.seconds(2.5));
+        showToast("Copied to clipboard.", 2.5);
+    }
+
+    private void showToast(String message, double seconds) {
+        statusLabel.setText(message);
+        statusLabel.setTextFill(Color.web("#047857"));
+        PauseTransition clear = new PauseTransition(Duration.seconds(seconds));
         clear.setOnFinished(ev -> showTemplateCount());
         clear.playFromStart();
     }
@@ -786,6 +1044,7 @@ public final class MainView extends VBox {
     public void showTemplateCount() {
         int count = viewModel.getTemplateCount();
         statusLabel.setText(count + (count == 1 ? " prompt" : " prompts"));
+        statusLabel.setTextFill(Color.web("#047857"));
     }
 
     private void hideOverlay() {
@@ -805,8 +1064,12 @@ public final class MainView extends VBox {
         if (f == null) {
             return;
         }
+        importFromPath(f.toPath());
+    }
+
+    private boolean importFromPath(Path path) {
         try {
-            List<PromptTemplate> imported = importExportService.importFromFile(f.toPath());
+            List<PromptTemplate> imported = importExportService.importFromFile(path);
             Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
             confirm.initOwner(stage);
             attachLightDialogStyles(confirm.getDialogPane());
@@ -815,24 +1078,17 @@ public final class MainView extends VBox {
             confirm.setContentText("This will replace your current prompt library with " + imported.size() + " template(s).");
             Optional<ButtonType> res = confirm.showAndWait();
             if (res.isPresent() && res.get() == ButtonType.OK) {
-                ArrayList<PromptTemplate> remapped = new ArrayList<PromptTemplate>();
-                for (PromptTemplate imp : imported) {
-                    remapped.add(new PromptTemplate(
-                            viewModel.allocateNewTemplateId(),
-                            imp.getTitle(),
-                            imp.getBody(),
-                            imp.getTags()));
-                }
+                List<PromptTemplate> remapped = importExportService.remapImportedTemplates(imported, viewModel::allocateNewTemplateId);
                 viewModel.replaceAllTemplates(remapped);
+                refreshCategories();
                 showTemplateCount();
-                statusLabel.setText("Imported " + remapped.size() + " template(s).");
-                PauseTransition clearImport = new PauseTransition(Duration.seconds(4));
-                clearImport.setOnFinished(ev2 -> showTemplateCount());
-                clearImport.playFromStart();
+                showToast("Imported " + remapped.size() + " template(s).", 4);
+                return true;
             }
         } catch (Exception ex) {
             showError("Import failed", ex.getMessage());
         }
+        return false;
     }
 
     private void onExport() {
@@ -845,7 +1101,10 @@ public final class MainView extends VBox {
             return;
         }
         try {
-            importExportService.exportToFile(f.toPath(), viewModel.getMasterTemplates());
+            List<PromptTemplate> selected = new ArrayList<PromptTemplate>(listView.getSelectionModel().getSelectedItems());
+            List<PromptTemplate> payload = selected.isEmpty() ? viewModel.getMasterTemplates() : selected;
+            importExportService.exportToFile(f.toPath(), payload);
+            showToast("Exported " + payload.size() + " template(s).", 3);
         } catch (Exception ex) {
             showError("Export failed", ex.getMessage());
         }
@@ -883,10 +1142,16 @@ public final class MainView extends VBox {
         idCaption.getStyleClass().add("preview-label");
         idCaption.setWrapText(true);
 
-        TextArea content = new TextArea(formatPromptDetailTextArea(t));
+        TextArea content = new TextArea(PromptTextFormatter.formatPromptDetailTextArea(t));
         content.setEditable(false);
         content.setWrapText(true);
         VBox.setVgrow(content, Priority.ALWAYS);
+        TextArea markdownPreview = new TextArea(MarkdownPreviewRenderer.render(t.getBody()));
+        markdownPreview.setEditable(false);
+        markdownPreview.setWrapText(true);
+        markdownPreview.setPromptText("Markdown preview");
+        markdownPreview.getStyleClass().add("preview-text");
+        VBox.setVgrow(markdownPreview, Priority.ALWAYS);
 
         Button copyB = new Button("Copy");
         styleToolbarButton(copyB, FontAwesomeSolid.COPY, "Copy prompt body to clipboard.");
@@ -911,6 +1176,20 @@ public final class MainView extends VBox {
             showPromptEditorDialog(t);
         });
 
+        Button duplicateB = new Button("Duplicate");
+        styleToolbarButton(duplicateB, FontAwesomeSolid.CLONE, "Create a copy of this template.");
+        duplicateB.setOnAction(e -> {
+            try {
+                PromptTemplate copy = viewModel.duplicateTemplate(t);
+                listView.getSelectionModel().select(copy);
+                refreshCategories();
+                closePromptDetailWindow();
+                showToast("Template duplicated.", 2.5);
+            } catch (Exception ex) {
+                showError("Could not duplicate", messageOrClass(ex));
+            }
+        });
+
         Button delB = new Button("Delete");
         styleToolbarButton(delB, FontAwesomeSolid.TRASH_ALT, "Remove this prompt from the library.");
         delB.setOnAction(e -> {
@@ -923,8 +1202,8 @@ public final class MainView extends VBox {
         styleToolbarButton(closeB, FontAwesomeSolid.TIMES, "Close this window.");
         closeB.setOnAction(e -> closePromptDetailWindow());
 
-        HBox actions = new HBox(8, copyB, favB, editB, delB, closeB);
-        VBox root = new VBox(10, idCaption, content, actions);
+        HBox actions = new HBox(8, copyB, favB, editB, duplicateB, delB, closeB);
+        VBox root = new VBox(10, idCaption, content, new Label("Rendered preview"), markdownPreview, actions);
         root.getStyleClass().add("app-panel");
         root.setPadding(new Insets(12));
 
@@ -933,58 +1212,6 @@ public final class MainView extends VBox {
         detail.setScene(scene);
         detail.setOnHidden(e -> promptDetailStage = null);
         detail.show();
-    }
-
-    private static String formatPromptDetailTextArea(PromptTemplate t) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("Title: ").append(nullToEmpty(t.getTitle())).append("\n");
-        sb.append("Tags: ").append(tagsCsvForEditor(t.getTags())).append("\n\n");
-        sb.append(nullToEmpty(t.getBody()));
-        return sb.toString();
-    }
-
-    private static String nullToEmpty(String s) {
-        return s == null ? "" : s;
-    }
-
-    /**
-     * Builds the list row suffix {@code  [tag1, tag2]} skipping null/blank tags (avoids NPE in {@link String#join}).
-     */
-    private static String formatTagsSuffixForCell(List<String> tags) {
-        if (tags == null || tags.isEmpty()) {
-            return "";
-        }
-        ArrayList<String> safe = new ArrayList<String>();
-        for (String tag : tags) {
-            if (tag == null) {
-                continue;
-            }
-            String x = tag.trim();
-            if (!x.isEmpty()) {
-                safe.add(x);
-            }
-        }
-        if (safe.isEmpty()) {
-            return "";
-        }
-        return "  [" + String.join(", ", safe) + "]";
-    }
-
-    private static String tagsCsvForEditor(List<String> tags) {
-        if (tags == null || tags.isEmpty()) {
-            return "";
-        }
-        ArrayList<String> safe = new ArrayList<String>();
-        for (String tag : tags) {
-            if (tag == null) {
-                continue;
-            }
-            String x = tag.trim();
-            if (!x.isEmpty()) {
-                safe.add(x);
-            }
-        }
-        return String.join(", ", safe);
     }
 
     private void showPromptEditorDialog(PromptTemplate existing) {
@@ -1007,10 +1234,49 @@ public final class MainView extends VBox {
         bodyArea.setWrapText(true);
         TextField tagsField = new TextField();
         tagsField.setPromptText("comma, separated, tags");
+        ComboBox<String> categoryDropdown = new ComboBox<String>();
+        categoryDropdown.setPromptText("Category");
+        categoryDropdown.setMaxWidth(Double.MAX_VALUE);
+        HBox.setHgrow(categoryDropdown, Priority.ALWAYS);
+        LinkedHashSet<String> knownCategories = new LinkedHashSet<String>();
+        for (String category : viewModel.getKnownCategories()) {
+            if (!"All".equalsIgnoreCase(category)) {
+                knownCategories.add(category);
+            }
+        }
+        String defaultCategory = InputText.trimToEmpty(preferences.getDefaultCategory());
+        if (defaultCategory.isEmpty()) {
+            defaultCategory = "General";
+        }
+        knownCategories.add(defaultCategory);
+        categoryDropdown.getItems().setAll(knownCategories);
+        categoryDropdown.getSelectionModel().select(defaultCategory);
+        Button addCategoryButton = new Button("New Category");
+        styleToolbarButton(addCategoryButton, FontAwesomeSolid.PLUS, "Create a new category and select it.");
+        addCategoryButton.setOnAction(e -> {
+            Optional<String> maybeCategory = showCreateCategoryDialog();
+            if (!maybeCategory.isPresent()) {
+                return;
+            }
+            String category = maybeCategory.get();
+            if (!categoryDropdown.getItems().contains(category)) {
+                categoryDropdown.getItems().add(category);
+            }
+            categoryDropdown.getSelectionModel().select(category);
+        });
+        HBox categoryRow = new HBox(8, categoryDropdown, addCategoryButton);
         if (isEdit) {
-            titleField.setText(nullToEmpty(existing.getTitle()));
-            bodyArea.setText(nullToEmpty(existing.getBody()));
-            tagsField.setText(tagsCsvForEditor(existing.getTags()));
+            titleField.setText(PromptTextFormatter.nullToEmpty(existing.getTitle()));
+            bodyArea.setText(PromptTextFormatter.nullToEmpty(existing.getBody()));
+            tagsField.setText(PromptTextFormatter.tagsCsvForEditor(existing.getTags()));
+            String editCategory = InputText.trimToEmpty(existing.getCategory());
+            if (editCategory.isEmpty()) {
+                editCategory = defaultCategory;
+            }
+            if (!categoryDropdown.getItems().contains(editCategory)) {
+                categoryDropdown.getItems().add(editCategory);
+            }
+            categoryDropdown.getSelectionModel().select(editCategory);
         }
         int r = 0;
         grid.add(new Label("Title"), 0, r);
@@ -1019,6 +1285,9 @@ public final class MainView extends VBox {
         grid.add(bodyArea, 1, r++);
         grid.add(new Label("Tags"), 0, r);
         grid.add(tagsField, 1, r);
+        r++;
+        grid.add(new Label("Category"), 0, r);
+        grid.add(categoryRow, 1, r);
         dialog.getDialogPane().setContent(grid);
         attachLightDialogStyles(dialog.getDialogPane());
 
@@ -1046,18 +1315,58 @@ public final class MainView extends VBox {
         String body = InputText.trimToEmpty(bodyArea.getText());
         try {
             PromptTemplate saved;
+            String chosenCategory = InputText.trimToEmpty(categoryDropdown.getSelectionModel().getSelectedItem());
+            if (chosenCategory.isEmpty()) {
+                chosenCategory = defaultCategory;
+            }
             if (isEdit) {
-                saved = new PromptTemplate(lockedId, title, body, parseTags(tagsField.getText()));
-                viewModel.replaceTemplateById(lockedId, saved);
+                saved = viewModel.editTemplate(existing, title, body, PromptTextFormatter.parseTags(tagsField.getText()), chosenCategory);
             } else {
                 String newId = viewModel.allocateNewTemplateId();
-                saved = new PromptTemplate(newId, title, body, parseTags(tagsField.getText()));
+                saved = new PromptTemplate(newId, title, body, PromptTextFormatter.parseTags(tagsField.getText()), false, chosenCategory, 0L, 0L, java.util.Collections.emptyList());
                 viewModel.addTemplate(saved);
                 viewModel.searchTextProperty().set("");
             }
             listView.getSelectionModel().select(saved);
+            refreshCategories();
+            showTemplateCount();
         } catch (Exception ex) {
             showError("Could not save", ex.getMessage());
+        }
+    }
+
+    private Optional<String> showCreateCategoryDialog() {
+        TextInputDialog dialog = new TextInputDialog("");
+        dialog.initOwner(stage);
+        dialog.setTitle("New category");
+        dialog.setHeaderText("Add a category");
+        dialog.setContentText("Category name");
+        attachLightDialogStyles(dialog.getDialogPane());
+        styleStandardAlertButtons(dialog.getDialogPane());
+        Optional<String> raw = dialog.showAndWait();
+        if (!raw.isPresent()) {
+            return Optional.empty();
+        }
+        String category = InputText.trimToEmpty(raw.get());
+        if (category.isEmpty()) {
+            showError("Validation", "Category name is required.");
+            return Optional.empty();
+        }
+        return Optional.of(category);
+    }
+
+    private void refreshDeleteCategoryDropdown(ComboBox<String> dropdown) {
+        ArrayList<String> categories = new ArrayList<String>();
+        for (String category : viewModel.getKnownCategories()) {
+            if (!"All".equalsIgnoreCase(category) && !"General".equalsIgnoreCase(category)) {
+                categories.add(category);
+            }
+        }
+        dropdown.getItems().setAll(categories);
+        if (!categories.isEmpty()) {
+            dropdown.getSelectionModel().select(0);
+        } else {
+            dropdown.getSelectionModel().clearSelection();
         }
     }
 
@@ -1078,26 +1387,15 @@ public final class MainView extends VBox {
         try {
             viewModel.deleteTemplate(t);
             listView.getSelectionModel().clearSelection();
+            lastDeletedTemplate = t;
+            undoDeleteButton.setDisable(false);
+            refreshCategories();
+            showToast("Deleted \"" + t.getTitle() + "\". Use Undo Delete to restore.", 4);
             return true;
         } catch (Exception ex) {
             showError("Could not delete", ex.getMessage());
             return false;
         }
-    }
-
-    private static List<String> parseTags(String raw) {
-        ArrayList<String> out = new ArrayList<String>();
-        String trimmed = InputText.trimToEmpty(raw);
-        if (trimmed.isEmpty()) {
-            return out;
-        }
-        for (String part : trimmed.split(",")) {
-            String s = InputText.trimToEmpty(part);
-            if (!s.isEmpty()) {
-                out.add(s);
-            }
-        }
-        return out;
     }
 
     private void styleStandardAlertButtons(DialogPane pane) {
@@ -1124,17 +1422,18 @@ public final class MainView extends VBox {
         a.showAndWait();
     }
 
-    private static String stylesheetUrl() {
-        URL u = MainView.class.getResource("/styles/overlay.css");
+    private static String stylesheetUrl(String resource) {
+        URL u = MainView.class.getResource(resource);
         return u == null ? null : u.toExternalForm();
     }
 
-    private static void attachLightDialogStyles(DialogPane pane) {
-        if (pane == null || LIGHT_STYLESHEET_URL == null) {
+    private void attachLightDialogStyles(DialogPane pane) {
+        String stylesheet = preferences.isDarkMode() ? DARK_STYLESHEET_URL : LIGHT_STYLESHEET_URL;
+        if (pane == null || stylesheet == null) {
             return;
         }
-        if (!pane.getStylesheets().contains(LIGHT_STYLESHEET_URL)) {
-            pane.getStylesheets().add(LIGHT_STYLESHEET_URL);
+        if (!pane.getStylesheets().contains(stylesheet)) {
+            pane.getStylesheets().add(stylesheet);
         }
     }
 }

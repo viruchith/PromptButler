@@ -11,7 +11,7 @@ class JsonSchemaValidatorTest {
 
     @Test
     void acceptsValidDocument() {
-        String json = "{\"version\":1,\"templates\":[{\"id\":\"1\",\"title\":\"t\",\"body\":\"b\",\"tags\":[]}]}";
+        String json = "{\"version\":1,\"templates\":[{\"id\":\"1\",\"title\":\"t\",\"body\":\"b\",\"tags\":[],\"category\":\"General\",\"usageCount\":1,\"lastUsedEpochMillis\":2,\"revisions\":[{\"body\":\"old\",\"updatedAtEpochMillis\":1}]}]}";
         validator.validatePromptStoreJson(json);
     }
 
@@ -43,6 +43,12 @@ class JsonSchemaValidatorTest {
     @Test
     void rejectsWrongTagType() {
         String json = "{\"version\":1,\"templates\":[{\"id\":\"1\",\"title\":\"t\",\"body\":\"b\",\"tags\":[1]}]}";
+        assertThrows(IllegalArgumentException.class, () -> validator.validatePromptStoreJson(json));
+    }
+
+    @Test
+    void rejectsInvalidRevisionType() {
+        String json = "{\"version\":1,\"templates\":[{\"id\":\"1\",\"title\":\"t\",\"body\":\"b\",\"tags\":[],\"revisions\":[\"x\"]}]}";
         assertThrows(IllegalArgumentException.class, () -> validator.validatePromptStoreJson(json));
     }
 }

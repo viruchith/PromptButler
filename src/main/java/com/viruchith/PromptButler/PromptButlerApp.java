@@ -16,6 +16,7 @@ import com.viruchith.PromptButler.core.model.BuildProfile;
 import com.viruchith.PromptButler.core.model.PromptTemplate;
 import com.viruchith.PromptButler.core.repository.JsonPromptRepository;
 import com.viruchith.PromptButler.core.repository.PromptRepository;
+import com.viruchith.PromptButler.core.service.DataFileWatchService;
 import com.viruchith.PromptButler.core.service.ImportExportService;
 import com.viruchith.PromptButler.core.service.JsonSchemaValidator;
 import com.viruchith.PromptButler.core.service.PreferencesRepository;
@@ -47,6 +48,7 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.function.Consumer;
 
 /**
  * JavaFX {@link Application} entry point: resolves storage, loads or seeds prompts, builds the
@@ -61,6 +63,7 @@ public final class PromptButlerApp extends Application {
     private MainView mainView;
     private JNativeHookHotkeyService hotkeyService;
     private TrayIntegration trayIntegration;
+    private DataFileWatchService dataFileWatchService;
 
     public static void main(String[] args) {
         launch(args);
@@ -153,21 +156,26 @@ public final class PromptButlerApp extends Application {
         stage.setMinWidth(320);
         stage.setMinHeight(360);
         stage.setResizable(true);
-        mainView = new MainView(stage, viewModel, clipboard, importExportService);
+        Consumer<UserPreferences> preferencesSaver = updated -> persistPreferencesQuietly(preferencesRepository, prefsFile, updated);
+        Consumer<Boolean> themeSwitcher = dark -> {
+            Scene existing = stage.getScene();
+            if (existing != null) {
+                applyTheme(existing, profile, dark.booleanValue());
+            }
+        };
+        mainView = new MainView(stage, viewModel, clipboard, importExportService, preferences, preferencesSaver, themeSwitcher);
         mainView.getStyleClass().add("app-panel");
         StackPane shell = new StackPane();
         shell.getStyleClass().add("root");
         StackPane.setAlignment(mainView, Pos.TOP_LEFT);
         mainView.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
-        Region resizeGrip = createSouthEastResizeGrip(stage, 320, 360);
+        Region resizeGrip = createSouthEastResizeGrip(stage);
         shell.getChildren().addAll(mainView, resizeGrip);
         Scene scene = new Scene(shell, 420, 520);
         OverlayStageFactory.applySceneBackgroundTransparent(scene);
-        java.net.URL css = getClass().getResource(profile.isDev() ? "/styles/overlay-dev.css" : "/styles/overlay.css");
-        if (css != null) {
-            scene.getStylesheets().add(css.toExternalForm());
-        }
+        applyTheme(scene, profile, preferences.isDarkMode());
         stage.setScene(scene);
+        applyContentBasedMinimumSize(stage, mainView, shell);
         stage.setOnCloseRequest(e -> {
             e.consume();
             stage.hide();
@@ -204,6 +212,62 @@ public final class PromptButlerApp extends Application {
             AppLogger.get().error("Global hotkey registration failed; use window controls only.", e);
         }
 
+        if (preferences.hasWindowBounds()) {
+            stage.setX(preferences.getWindowX());
+            stage.setY(preferences.getWindowY());
+            stage.setWidth(Math.max(stage.getMinWidth(), preferences.getWindowWidth()));
+            stage.setHeight(Math.max(stage.getMinHeight(), preferences.getWindowHeight()));
+        } else {
+            stage.setWidth(Math.max(stage.getWidth(), stage.getMinWidth()));
+            stage.setHeight(Math.max(stage.getHeight(), stage.getMinHeight()));
+        }
+        stage.xProperty().addListener((obs, oldValue, newValue) -> {
+            preferences.setWindowX(newValue.doubleValue());
+            persistPreferencesQuietly(preferencesRepository, prefsFile, preferences);
+        });
+        stage.yProperty().addListener((obs, oldValue, newValue) -> {
+            preferences.setWindowY(newValue.doubleValue());
+            persistPreferencesQuietly(preferencesRepository, prefsFile, preferences);
+        });
+        stage.widthProperty().addListener((obs, oldValue, newValue) -> {
+            preferences.setWindowWidth(newValue.doubleValue());
+            persistPreferencesQuietly(preferencesRepository, prefsFile, preferences);
+        });
+        stage.heightProperty().addListener((obs, oldValue, newValue) -> {
+            preferences.setWindowHeight(newValue.doubleValue());
+            persistPreferencesQuietly(preferencesRepository, prefsFile, preferences);
+        });
+
+        dataFileWatchService = new DataFileWatchService(
+                dataDir,
+                promptsFile.getFileName().toString(),
+                prefsFile.getFileName().toString(),
+                () -> Platform.runLater(() -> {
+                    try {
+                        List<PromptTemplate> latest = repository.loadAll();
+                        if (mainView != null) {
+                            mainView.reloadTemplatesFromDisk(latest);
+                        }
+                    } catch (Exception e) {
+                        AppLogger.get().warn("Could not reload prompts after filesystem change.", e);
+                    }
+                }),
+                () -> Platform.runLater(() -> {
+                    try {
+                        UserPreferences latest = preferencesRepository.loadOrDefaults(prefsFile);
+                        if (mainView != null) {
+                            mainView.applyUpdatedPreferences(latest);
+                        }
+                    } catch (Exception e) {
+                        AppLogger.get().warn("Could not reload preferences after filesystem change.", e);
+                    }
+                }));
+        try {
+            dataFileWatchService.start();
+        } catch (Exception e) {
+            AppLogger.get().warn("Data file watcher could not start.", e);
+        }
+
         stage.show();
         mainView.focusSearch();
     }
@@ -229,7 +293,7 @@ public final class PromptButlerApp extends Application {
     }
 
     /** Undecorated stages need an explicit resize affordance; this region sits above the SE corner of the shell. */
-    private static Region createSouthEastResizeGrip(Stage stage, double minWidth, double minHeight) {
+    private static Region createSouthEastResizeGrip(Stage stage) {
         Region grip = new Region();
         grip.setPickOnBounds(true);
         grip.setPrefSize(14, 14);
@@ -246,12 +310,21 @@ public final class PromptButlerApp extends Application {
             start[3] = stage.getHeight();
         });
         grip.setOnMouseDragged(e -> {
-            double nw = Math.max(minWidth, start[2] + e.getScreenX() - start[0]);
-            double nh = Math.max(minHeight, start[3] + e.getScreenY() - start[1]);
+            double nw = Math.max(stage.getMinWidth(), start[2] + e.getScreenX() - start[0]);
+            double nh = Math.max(stage.getMinHeight(), start[3] + e.getScreenY() - start[1]);
             stage.setWidth(nw);
             stage.setHeight(nh);
         });
         return grip;
+    }
+
+    private static void applyContentBasedMinimumSize(Stage stage, MainView view, StackPane shell) {
+        shell.applyCss();
+        shell.layout();
+        double minWidth = Math.max(stage.getMinWidth(), Math.ceil(view.prefWidth(-1) + 24.0));
+        double minHeight = Math.max(stage.getMinHeight(), Math.ceil(view.prefHeight(minWidth) + 24.0));
+        stage.setMinWidth(minWidth);
+        stage.setMinHeight(minHeight);
     }
 
     /** Taskbar / alt-tab icon; separate from in-scene title bar {@link com.viruchith.PromptButler.ui.MainView} icon. */
@@ -285,11 +358,31 @@ public final class PromptButlerApp extends Application {
 
     @Override
     public void stop() {
+        if (dataFileWatchService != null) {
+            dataFileWatchService.stop();
+        }
         if (hotkeyService != null) {
             hotkeyService.stop();
         }
         if (trayIntegration != null) {
             trayIntegration.remove();
+        }
+    }
+
+    private void applyTheme(Scene scene, BuildProfile profile, boolean darkMode) {
+        scene.getStylesheets().clear();
+        String stylesheet = darkMode ? "/styles/overlay-dark.css" : (profile.isDev() ? "/styles/overlay-dev.css" : "/styles/overlay.css");
+        java.net.URL css = getClass().getResource(stylesheet);
+        if (css != null) {
+            scene.getStylesheets().add(css.toExternalForm());
+        }
+    }
+
+    private static void persistPreferencesQuietly(PreferencesRepository repository, Path prefsFile, UserPreferences preferences) {
+        try {
+            repository.save(prefsFile, preferences);
+        } catch (Exception e) {
+            AppLogger.get().warn("Could not persist preferences: " + e.getMessage());
         }
     }
 }

@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -56,5 +57,50 @@ class PromptTemplateTest {
     void favoriteCanBeFalseExplicitly() {
         PromptTemplate p = new PromptTemplate("id", "title", "body", Collections.emptyList(), false);
         assertFalse(p.isFavorite());
+    }
+
+    @Test
+    void defaultsCategoryAndUsageMetadata() {
+        PromptTemplate p = new PromptTemplate("id", "title", "body", Collections.emptyList());
+        assertEquals("General", p.getCategory());
+        assertEquals(0L, p.getUsageCount());
+        assertEquals(0L, p.getLastUsedEpochMillis());
+        assertTrue(p.getRevisions().isEmpty());
+    }
+
+    @Test
+    void equalsAndHashCodeMatchForEquivalentInstances() {
+        PromptTemplate a = new PromptTemplate("id", "title", "body", Arrays.asList("x"), true, "Dev", 2L, 3L, Collections.emptyList());
+        PromptTemplate b = new PromptTemplate("id", "title", "body", Arrays.asList("x"), true, "Dev", 2L, 3L, Collections.emptyList());
+        assertEquals(a, b);
+        assertEquals(a.hashCode(), b.hashCode());
+    }
+
+    @Test
+    void editedBodyCapturesRevisionHistory() {
+        PromptTemplate base = new PromptTemplate("id", "title", "body", Collections.emptyList());
+        PromptTemplate edited = base.withEditedContent("title", "new body", Collections.emptyList(), "General");
+        assertEquals(1, edited.getRevisions().size());
+        assertEquals("body", edited.getRevisions().get(0).getBody());
+    }
+
+    @Test
+    void duplicateResetsUsageAndHistory() {
+        List<PromptTemplate.Revision> history = Collections.singletonList(new PromptTemplate.Revision("v1", 1L));
+        PromptTemplate base = new PromptTemplate("id", "title", "body", Collections.emptyList(), true, "General", 8L, 12L, history);
+        PromptTemplate duplicated = base.withDuplicatedId("id-2", "title copy");
+        assertEquals("id-2", duplicated.getId());
+        assertEquals("title copy", duplicated.getTitle());
+        assertEquals(0L, duplicated.getUsageCount());
+        assertEquals(0L, duplicated.getLastUsedEpochMillis());
+        assertTrue(duplicated.getRevisions().isEmpty());
+    }
+
+    @Test
+    void revisionEqualityAndHashCode() {
+        PromptTemplate.Revision a = new PromptTemplate.Revision("body", 123L);
+        PromptTemplate.Revision b = new PromptTemplate.Revision("body", 123L);
+        assertEquals(a, b);
+        assertEquals(a.hashCode(), b.hashCode());
     }
 }

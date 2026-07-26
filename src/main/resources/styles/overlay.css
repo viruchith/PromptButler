@@ -134,6 +134,10 @@
     -fx-padding: 6 10 6 10;
 }
 
+.app-icon-glyph {
+    -fx-icon-color: #111827;
+}
+
 .list-row-copy {
     -fx-padding: 2 8 2 8;
     -fx-min-width: 2.5em;
