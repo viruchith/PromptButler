@@ -8,11 +8,7 @@ import org.mockito.Mockito;
 import java.util.Arrays;
 import java.util.Collections;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 class MainViewModelTest {
 
@@ -66,5 +62,43 @@ class MainViewModelTest {
         assertTrue(vm.idExists(id1));
         String id3 = vm.allocateNewTemplateId();
         assertFalse(vm.idExists(id3));
+    }
+
+    @Test
+    void getTemplateCountReflectsAddAndDelete() throws Exception {
+        PromptRepository repo = Mockito.mock(PromptRepository.class);
+        MainViewModel vm = new MainViewModel(repo, Collections.emptyList());
+        assertEquals(0, vm.getTemplateCount());
+        PromptTemplate a = new PromptTemplate("a", "A", "b", Collections.emptyList());
+        vm.addTemplate(a);
+        assertEquals(1, vm.getTemplateCount());
+        vm.deleteTemplate(a);
+        assertEquals(0, vm.getTemplateCount());
+    }
+
+    @Test
+    void toggleFavoriteFlipsFavoriteAndPersists() throws Exception {
+        PromptRepository repo = Mockito.mock(PromptRepository.class);
+        PromptTemplate orig = new PromptTemplate("a", "A", "b", Collections.emptyList(), false);
+        MainViewModel vm = new MainViewModel(repo, Arrays.asList(orig));
+        assertFalse(vm.getMasterTemplates().get(0).isFavorite());
+        vm.toggleFavorite(orig);
+        assertTrue(vm.getMasterTemplates().get(0).isFavorite());
+        // Toggle back
+        vm.toggleFavorite(vm.getMasterTemplates().get(0));
+        assertFalse(vm.getMasterTemplates().get(0).isFavorite());
+        Mockito.verify(repo, Mockito.atLeast(2)).saveAll(Mockito.anyList());
+    }
+
+    @Test
+    void idIndexRebuiltOnReplaceAll() throws Exception {
+        PromptRepository repo = Mockito.mock(PromptRepository.class);
+        MainViewModel vm = new MainViewModel(repo, Arrays.asList(
+                new PromptTemplate("a", "A", "b", Collections.emptyList())));
+        assertTrue(vm.idExists("a"));
+        vm.replaceAllTemplates(Arrays.asList(
+                new PromptTemplate("b", "B", "b", Collections.emptyList())));
+        assertFalse(vm.idExists("a"));
+        assertTrue(vm.idExists("b"));
     }
 }

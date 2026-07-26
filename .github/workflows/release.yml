@@ -1,0 +1,68 @@
+name: Release Fat JAR
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build & Release Fat JAR
+    runs-on: ubuntu-latest
+    # Only release from main branch
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify tag is on main
+        run: |
+          git fetch origin main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::Tag must point to a commit on the main branch"
+            exit 1
+          fi
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Run tests
+        run: ./gradlew check --no-daemon
+
+      - name: Build fat JAR (cross-platform)
+        run: ./gradlew shadowJar --no-daemon
+
+      - name: Get version from tag
+        id: version
+        run: echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: Prompt Butler ${{ steps.version.outputs.tag }}
+          body: |
+            ## Prompt Butler ${{ steps.version.outputs.tag }}
+
+            Cross-platform fat JAR — requires **JDK 17+** on the target machine.
+
+            ### Run
+            ```bash
+            java --add-exports=javafx.graphics/com.sun.glass.ui=ALL-UNNAMED \
+                 --add-opens=javafx.graphics/com.sun.glass.ui=ALL-UNNAMED \
+                 -jar prompt-butler-*-all.jar
+            ```
+
+            See [README.md](https://github.com/${{ github.repository }}/blob/main/README.md) for full documentation.
+          files: build/libs/*-all.jar
+          draft: false
+          prerelease: ${{ contains(steps.version.outputs.tag, '-rc') || contains(steps.version.outputs.tag, '-beta') }}

@@ -5,8 +5,7 @@ import org.junit.jupiter.api.Test;
 import java.util.Arrays;
 import java.util.Collections;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.*;
 
 class PromptTemplateTest {
 
@@ -39,5 +38,23 @@ class PromptTemplateTest {
     void rejectsBlankIdAfterTrim() {
         assertThrows(IllegalArgumentException.class, () ->
                 new PromptTemplate("   ", "t", "b", Collections.<String>emptyList()));
+    }
+
+    @Test
+    void defaultFavoriteIsFalse() {
+        PromptTemplate p = new PromptTemplate("id", "title", "body", Collections.emptyList());
+        assertFalse(p.isFavorite());
+    }
+
+    @Test
+    void favoriteConstructorSetsField() {
+        PromptTemplate p = new PromptTemplate("id", "title", "body", Collections.emptyList(), true);
+        assertTrue(p.isFavorite());
+    }
+
+    @Test
+    void favoriteCanBeFalseExplicitly() {
+        PromptTemplate p = new PromptTemplate("id", "title", "body", Collections.emptyList(), false);
+        assertFalse(p.isFavorite());
     }
 }

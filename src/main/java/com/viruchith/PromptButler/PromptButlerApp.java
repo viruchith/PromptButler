@@ -83,7 +83,7 @@ public final class PromptButlerApp extends Application {
                 alert.setContentText(m == null || m.isEmpty() ? t.toString() : m);
                 alert.showAndWait();
             } catch (Throwable ignored) {
-                t.printStackTrace();
+                AppLogger.get().error("Fatal startup error (alert failed)", t);
             }
             Platform.exit();
         }

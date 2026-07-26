@@ -14,7 +14,7 @@ For **developers** (architecture, packages, build internals, extension points), 
 
 ---
 
-**Version:** `0.2.0-SNAPSHOT` (see `build.gradle` → `version`).
+**Version:** `0.3.0-SNAPSHOT` (see `build.gradle` → `version`).
 
 ## Table of contents
 
@@ -36,11 +36,14 @@ For **developers** (architecture, packages, build internals, extension points), 
 | Capability | Description |
 |------------|-------------|
 | **Fuzzy search** | Find prompts by title and tags. |
+| **Favorites** | Star templates to pin them at the top of search results (★). |
 | **Variables** | Templates support `{{name}}` placeholders; fill a small form, then copy compiled text. |
 | **Clipboard** | One-click or keyboard copy of prompt body or compiled output. |
 | **Import / export** | JSON library for backup, sharing, or migration (import reassigns UUID ids). |
 | **Tray & auto-hide** | Optional system tray and defocus/minimize behaviors (see `preferences.json`). |
-| **Data folder** | Toolbar **Data** sets where `prompts.json` / `preferences.json` live (pointer under `~/PromptButler/`; restart to apply). |
+| **Dark mode** | Toggle dark theme via `preferences.json` (`"darkMode": true`). |
+| **Configurable hotkey** | Override the global toggle shortcut in `preferences.json` (`hotkeyKeyCode`, `hotkeyModifiers`). |
+| **Data folder** | Toolbar **Data Folder** sets where `prompts.json` / `preferences.json` live (pointer under `~/PromptButler/`; restart to apply). |
 
 ---
 
@@ -186,9 +189,35 @@ There is **no** `jpackage` or `shadowJar` task in this repository by default. Pr
 2. Zip **`build/install/prompt-butler/`** and attach it to a release, or copy the directory to users.
 3. Ensure **JDK or JRE 17+** is installed and **`java`** is on `PATH` when using the generated scripts.
 
-### 2. Fat JAR (optional)
+### 2. Fat JAR (cross-platform, single file)
 
-To ship a single JAR you would add a plugin such as **Shadow** and merge service files; you must still document **JavaFX module path** or use a **custom runtime image** (`jlink`). For most teams, **`installDist`** or **`jpackage`** (below) is easier than a raw fat JAR.
+Uses the [Shadow plugin](https://gradleup.com/shadow/) to produce one self-contained JAR with JavaFX natives for **Windows, macOS (Intel + Apple Silicon), and Linux** bundled inside. Java 17+ must be installed on the target machine, but no JavaFX installation or `--module-path` is needed.
+
+**Build (any OS, JDK 17+ required on build machine):**
+
+```bash
+# macOS / Linux
+./gradlew shadowJar
+
+# Windows
+.\gradlew.bat shadowJar
+```
+
+Output: `build/libs/prompt-butler-0.3.0-SNAPSHOT-all.jar`
+
+**Run on the target machine:**
+
+```bash
+# macOS / Linux
+java --add-exports=javafx.graphics/com.sun.glass.ui=ALL-UNNAMED \
+     --add-opens=javafx.graphics/com.sun.glass.ui=ALL-UNNAMED \
+     -jar build/libs/prompt-butler-0.3.0-SNAPSHOT-all.jar
+
+# Windows (single line)
+java --add-exports=javafx.graphics/com.sun.glass.ui=ALL-UNNAMED --add-opens=javafx.graphics/com.sun.glass.ui=ALL-UNNAMED -jar build\libs\prompt-butler-0.3.0-SNAPSHOT-all.jar
+```
+
+> **Why the JVM flags?** `PromptButlerApp` accesses `com.sun.glass.ui` internals for the global hotkey and tray integration. These are the same flags already declared in `applicationDefaultJvmArgs` in `build.gradle` for the `run` and `installDist` paths.
 
 ### 3. Native installers (`jpackage`) — recommended for “real” releases
 
@@ -213,7 +242,7 @@ The Gradle **`maven-publish`** plugin is **not** configured here. To publish the
 | `PROMPT_BUTLER_DIR` or `-Dprompt.butler.dir=...` | Override data directory (highest precedence). |
 | Toolbar **Data** | Choose JSON storage folder; writes `${user.home}/PromptButler/storage.json`; **restart** to apply. |
 | Default (all platforms) | `${user.home}/PromptButler/` for `prompts.json` and `preferences.json`. |
-| `preferences.json` | `autoHideMode`: `OPACITY`, `MINIMIZE`, `TRAY`, `HIDE`; `defocusOpacity` (0–1). |
+| `preferences.json` | `autoHideMode`: `OPACITY`, `MINIMIZE`, `TRAY`, `HIDE`; `defocusOpacity` (0–1); `darkMode` (true/false); `hotkeyKeyCode` / `hotkeyModifiers` (jNativeHook constants, -1 = default). |
 
 **UI summary:** Row **Copy**; single-click opens a **detail** window (copy / edit / delete). **New** creates prompts (UUID ids). **Import** replaces the library. **Double-click** or **Enter** on the list runs the “choose template” flow (variables or copy-and-hide). **Ctrl+C** copies the selected body when the list is focused.
 
@@ -222,6 +251,44 @@ The Gradle **`maven-publish`** plugin is **not** configured here. To publish the
 ## Technical reference (developers)
 
 See **[TECHNICAL.md](TECHNICAL.md)** for package layout, startup sequence, JavaFX stage/scene decisions, `MainView` / `MainViewModel` responsibilities, JSON and schema flow, clipboard abstraction, hotkey and tray wiring, testing scope, and suggested extension points.
+
+---
+
+## Changelog
+
+### 0.3.0-SNAPSHOT
+
+**Features**
+
+- **Favorites:** Star/pin templates so they appear first in search results (★ prefix in list).
+- **Dark mode:** New `overlay-dark.css` theme; enable via `"darkMode": true` in `preferences.json`.
+- **Configurable global hotkey:** Override the default Ctrl+Alt+P / Cmd+Alt+P via `hotkeyKeyCode` and `hotkeyModifiers` in `preferences.json`.
+- **Search debounce:** 150 ms delay before filtering fires, eliminating lag on large libraries.
+- **Template count:** Status bar shows the total number of prompts.
+- **Import feedback:** Success notification displays how many templates were imported.
+- **Data Folder button:** Renamed from "Data" with a clearer tooltip.
+
+**Performance**
+
+- O(1) ID lookup index (`HashSet`) replaces O(n) linear scan in the view model.
+- Favorites-aware sort: favorited templates bubble to the top at the same relevance score.
+
+**Code quality & security**
+
+- Replaced bare `printStackTrace()` calls with structured `AppLogger` output (Semgrep SCA fix).
+- Converted anonymous `Runnable` inner classes to lambdas.
+- `favorite` field added to JSON schema allowlist.
+
+**Tests**
+
+- New `JNativeHookHotkeyServiceTest` (hotkey matching, arming, custom hotkey).
+- Expanded `FuzzySearchServiceTest` (Unicode, large lists, favorites ordering).
+- Expanded `VariableParserTest` (nested braces, adjacent placeholders, Unicode).
+- Expanded `PromptTemplateTest`, `UserPreferencesTest`, `MainViewModelTest`.
+
+### 0.2.0-SNAPSHOT
+
+- Initial public version: overlay window, fuzzy search, `{{variable}}` fill-in, import/export, global hotkey, tray integration.
 
 ---
 
@@ -237,6 +304,7 @@ Third-party runtime components (OpenJFX, Gson, jNativeHook, Ikonli, etc.) are li
 
 - **Micro Focus UFT / `JAVA_TOOL_OPTIONS`:** The **`run`** task strips `JAVA_TOOL_OPTIONS` and `_JAVA_OPTIONS` from the **application** process (unless `-PkeepUftJvmHooks=true`). **`installDist`** rewrites **`prompt-butler.bat` / `prompt-butler`** so OpenJFX platform JARs are on **`--module-path`** with **`--add-modules`** (OpenJFX 11+ does not reliably start from a flat classpath alone), **`applicationDefaultJvmArgs`** Glass **`--add-exports` / `--add-opens`** apply there, and the scripts **clear** those env vars before **`java`**. Re-run **`./gradlew installDist`** after dependency or script changes. If hooks persist in your shell, clear them manually: `set JAVA_TOOL_OPTIONS=` and `set _JAVA_OPTIONS=` in `cmd` / PowerShell before starting the app.
 - **Global hotkey (jnativehook):** Some corporate machines block low-level hooks; use the window and toolbar if registration fails (errors are logged).
+- **Quit button / app won't exit:** The toolbar **Quit** and tray **Exit** both call `System.exit(0)` directly rather than `Platform.exit()`. On macOS, `Platform.exit()` deadlocks with AWT `SystemTray` (both compete for the AppKit lock). If you add a `Runtime.getRuntime().addShutdownHook` that calls `GlobalScreen.unregisterNativeHook()`, the JVM will hang on exit (including Ctrl+C); see `TECHNICAL.md §4.5`.
 - **JavaFX / transparent window issues:** See **`PROJECT_STATE_CHECKPOINT.md`** for mitigations (deferred clipboard, click resolution, etc.).
 
 ---

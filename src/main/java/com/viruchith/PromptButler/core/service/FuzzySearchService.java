@@ -4,7 +4,6 @@ import com.viruchith.PromptButler.core.model.PromptTemplate;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
@@ -22,11 +21,12 @@ public final class FuzzySearchService {
         String q = query.trim().toLowerCase(Locale.ROOT);
         if (q.isEmpty()) {
             ArrayList<PromptTemplate> copy = new ArrayList<PromptTemplate>(templates);
-            Collections.sort(copy, new Comparator<PromptTemplate>() {
-                @Override
-                public int compare(PromptTemplate a, PromptTemplate b) {
-                    return a.getTitle().compareToIgnoreCase(b.getTitle());
+            Collections.sort(copy, (a, b) -> {
+                // Favorites first, then alphabetical
+                if (a.isFavorite() != b.isFavorite()) {
+                    return a.isFavorite() ? -1 : 1;
                 }
+                return a.getTitle().compareToIgnoreCase(b.getTitle());
             });
             return copy;
         }
@@ -44,14 +44,15 @@ public final class FuzzySearchService {
             }
             scored.add(new Scored(t, best));
         }
-        Collections.sort(scored, new Comparator<Scored>() {
-            @Override
-            public int compare(Scored a, Scored b) {
-                if (a.score != b.score) {
-                    return Integer.compare(a.score, b.score);
-                }
-                return a.template.getTitle().compareToIgnoreCase(b.template.getTitle());
+        Collections.sort(scored, (a, b) -> {
+            // Favorites first at same score
+            if (a.score != b.score) {
+                return Integer.compare(a.score, b.score);
             }
+            if (a.template.isFavorite() != b.template.isFavorite()) {
+                return a.template.isFavorite() ? -1 : 1;
+            }
+            return a.template.getTitle().compareToIgnoreCase(b.template.getTitle());
         });
         ArrayList<PromptTemplate> out = new ArrayList<PromptTemplate>();
         for (Scored s : scored) {

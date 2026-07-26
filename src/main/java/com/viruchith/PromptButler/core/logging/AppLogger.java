@@ -40,14 +40,24 @@ public final class AppLogger {
     public void warn(String message, Throwable t) {
         err.println("[prompt-butler] WARN: " + Objects.requireNonNull(message, "message"));
         if (t != null) {
-            t.printStackTrace(err);
+            err.println("  Caused by: " + t.getClass().getName() + ": " + t.getMessage());
+            if (verbose) {
+                for (StackTraceElement el : t.getStackTrace()) {
+                    err.println("    at " + el);
+                }
+            }
         }
     }
 
     public void error(String message, Throwable t) {
         err.println("[prompt-butler] ERROR: " + Objects.requireNonNull(message, "message"));
         if (t != null) {
-            t.printStackTrace(err);
+            err.println("  Caused by: " + t.getClass().getName() + ": " + t.getMessage());
+            if (verbose) {
+                for (StackTraceElement el : t.getStackTrace()) {
+                    err.println("    at " + el);
+                }
+            }
         }
     }
 }
