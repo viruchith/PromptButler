@@ -16,6 +16,10 @@ import java.util.Objects;
 
 public final class PreferencesRepository {
 
+    /** Files written with schemaVersion >= CURRENT_SCHEMA_VERSION honour explicit field values.
+     *  Older files (no schemaVersion) trigger migrations that reset fields whose defaults changed. */
+    private static final int CURRENT_SCHEMA_VERSION = 2;
+
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
     public UserPreferences loadOrDefaults(Path file) {
@@ -51,6 +55,13 @@ public final class PreferencesRepository {
             if (dto.quoteCompiledVariables != null) {
                 p.setQuoteCompiledVariables(dto.quoteCompiledVariables.booleanValue());
             }
+            // Migration: files written before schema v2 had quoteCompiledVariables defaulting to
+            // false; reset to true (the new default) so existing installations get the correct
+            // out-of-the-box behaviour.
+            int schemaVersion = (dto.schemaVersion != null) ? dto.schemaVersion.intValue() : 0;
+            if (schemaVersion < CURRENT_SCHEMA_VERSION) {
+                p.setQuoteCompiledVariables(true);
+            }
             if (dto.defaultCategory != null) {
                 p.setDefaultCategory(dto.defaultCategory);
             }
@@ -76,6 +87,7 @@ public final class PreferencesRepository {
         Objects.requireNonNull(file, "file");
         Objects.requireNonNull(prefs, "prefs");
         PrefsDto dto = new PrefsDto();
+        dto.schemaVersion = Integer.valueOf(CURRENT_SCHEMA_VERSION);
         dto.autoHideMode = prefs.getAutoHideMode().name();
         dto.defocusOpacity = Double.valueOf(prefs.getDefocusOpacity());
         dto.darkMode = Boolean.valueOf(prefs.isDarkMode());
@@ -83,10 +95,10 @@ public final class PreferencesRepository {
         dto.hotkeyModifiers = Integer.valueOf(prefs.getHotkeyModifiers());
         dto.quoteCompiledVariables = Boolean.valueOf(prefs.isQuoteCompiledVariables());
         dto.defaultCategory = prefs.getDefaultCategory();
-        dto.windowX = Double.valueOf(prefs.getWindowX());
-        dto.windowY = Double.valueOf(prefs.getWindowY());
-        dto.windowWidth = Double.valueOf(prefs.getWindowWidth());
-        dto.windowHeight = Double.valueOf(prefs.getWindowHeight());
+        dto.windowX = prefs.hasWindowBounds() ? Double.valueOf(prefs.getWindowX()) : null;
+        dto.windowY = prefs.hasWindowBounds() ? Double.valueOf(prefs.getWindowY()) : null;
+        dto.windowWidth = prefs.hasWindowBounds() ? Double.valueOf(prefs.getWindowWidth()) : null;
+        dto.windowHeight = prefs.hasWindowBounds() ? Double.valueOf(prefs.getWindowHeight()) : null;
         String json = GSON.toJson(dto);
         Path parent = file.getParent();
         if (parent != null) {
@@ -111,6 +123,7 @@ public final class PreferencesRepository {
 
     @SuppressWarnings("unused")
     private static final class PrefsDto {
+        Integer schemaVersion;
         String autoHideMode;
         Double defocusOpacity;
         Boolean darkMode;
