@@ -7,10 +7,14 @@ All notable changes to Prompt Butler are documented in this file.
 ### Fixed
 
 - Variable values are now wrapped in double quotes by default (`quoteCompiledVariables` defaults to `true`). Previously they were inserted as raw text unless the setting was explicitly enabled in Settings.
+- Existing `preferences.json` files with `quoteCompiledVariables: false` are now automatically migrated to `true` on first load (schema v2 migration). User opt-out via Settings is still respected in newly saved files.
+- Window position is now clamped to the union of all connected screen visual bounds on startup. Moving the window fully off-screen no longer causes it to restore to an inaccessible position — at least 80 px of the window is always kept within visible area.
+- `preferences.json` save no longer throws when window bounds have not been set yet (NaN values are skipped instead of passed to Gson).
 
 ### Tests
 
 - Expanded `TemplateCompilerTest` with comprehensive escape-scenario coverage: empty/null values, single quotes, double quotes, backslash, trailing backslash, consecutive backslashes, backslash-before-quote, literal newlines, multiple variables, and missing-key cases.
+- Added `PreferencesRepositoryTest` cases for schema version persistence, legacy file migration, explicit opt-out round-trip, and missing-file defaults.
 
 ## 0.4.0-SNAPSHOT
 
