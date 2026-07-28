@@ -213,10 +213,13 @@ public final class PromptButlerApp extends Application {
         }
 
         if (preferences.hasWindowBounds()) {
-            stage.setX(preferences.getWindowX());
-            stage.setY(preferences.getWindowY());
-            stage.setWidth(Math.max(stage.getMinWidth(), preferences.getWindowWidth()));
-            stage.setHeight(Math.max(stage.getMinHeight(), preferences.getWindowHeight()));
+            double w = Math.max(stage.getMinWidth(), preferences.getWindowWidth());
+            double h = Math.max(stage.getMinHeight(), preferences.getWindowHeight());
+            double[] xy = clampBoundsToScreens(preferences.getWindowX(), preferences.getWindowY(), w, h);
+            stage.setX(xy[0]);
+            stage.setY(xy[1]);
+            stage.setWidth(w);
+            stage.setHeight(h);
         } else {
             stage.setWidth(Math.max(stage.getWidth(), stage.getMinWidth()));
             stage.setHeight(Math.max(stage.getHeight(), stage.getMinHeight()));
@@ -384,5 +387,34 @@ public final class PromptButlerApp extends Application {
         } catch (Exception e) {
             AppLogger.get().warn("Could not persist preferences: " + e.getMessage());
         }
+    }
+
+    /**
+     * Clamps {@code x, y} so that at least {@code MIN_VISIBLE_PX} pixels of the window
+     * remain visible within the union of all connected screens.
+     * Returns {@code [clampedX, clampedY]}.
+     */
+    private static final double MIN_VISIBLE_PX = 80.0;
+
+    private static double[] clampBoundsToScreens(double x, double y, double w, double h) {
+        double unionMinX = Double.MAX_VALUE;
+        double unionMinY = Double.MAX_VALUE;
+        double unionMaxX = -Double.MAX_VALUE;
+        double unionMaxY = -Double.MAX_VALUE;
+        for (javafx.stage.Screen screen : javafx.stage.Screen.getScreens()) {
+            javafx.geometry.Rectangle2D vb = screen.getVisualBounds();
+            unionMinX = Math.min(unionMinX, vb.getMinX());
+            unionMinY = Math.min(unionMinY, vb.getMinY());
+            unionMaxX = Math.max(unionMaxX, vb.getMaxX());
+            unionMaxY = Math.max(unionMaxY, vb.getMaxY());
+        }
+        if (unionMinX >= unionMaxX || unionMinY >= unionMaxY) {
+            // No screens detected — return unchanged.
+            return new double[]{x, y};
+        }
+        // Ensure at least MIN_VISIBLE_PX of the window is within screen bounds on each axis.
+        double clampedX = Math.min(Math.max(x, unionMinX - w + MIN_VISIBLE_PX), unionMaxX - MIN_VISIBLE_PX);
+        double clampedY = Math.min(Math.max(y, unionMinY - h + MIN_VISIBLE_PX), unionMaxY - MIN_VISIBLE_PX);
+        return new double[]{clampedX, clampedY};
     }
 }

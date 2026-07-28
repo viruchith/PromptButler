@@ -16,8 +16,8 @@ public final class UserPreferences {
     private int hotkeyKeyCode = -1;
     /** Custom global hotkey modifiers (bitmask of jNativeHook modifier masks); -1 means default. */
     private int hotkeyModifiers = -1;
-    /** Whether compiled {{variables}} should be wrapped with quotes. */
-    private boolean quoteCompiledVariables = false;
+    /** Whether compiled {{variables}} should be wrapped with double quotes. Defaults to true. */
+    private boolean quoteCompiledVariables = true;
     /** Default category applied to newly created prompts when not explicitly set. */
     private String defaultCategory = "General";
     /** Persisted main-window bounds; NaN means unknown/unset. */

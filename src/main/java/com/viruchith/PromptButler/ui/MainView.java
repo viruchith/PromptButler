@@ -258,7 +258,7 @@ public final class MainView extends VBox {
         String implVer = MainView.class.getPackage() != null
                 ? MainView.class.getPackage().getImplementationVersion()
                 : null;
-        String versionLine = (implVer == null || implVer.isEmpty()) ? "0.4.0-SNAPSHOT" : implVer;
+        String versionLine = (implVer == null || implVer.isEmpty()) ? "0.4.1-SNAPSHOT" : implVer;
         Label version = new Label("Version " + versionLine);
         version.getStyleClass().add("preview-label");
 
