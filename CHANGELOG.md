@@ -2,6 +2,16 @@
 
 All notable changes to Prompt Butler are documented in this file.
 
+## 0.4.1-SNAPSHOT
+
+### Fixed
+
+- Variable values are now wrapped in double quotes by default (`quoteCompiledVariables` defaults to `true`). Previously they were inserted as raw text unless the setting was explicitly enabled in Settings.
+
+### Tests
+
+- Expanded `TemplateCompilerTest` with comprehensive escape-scenario coverage: empty/null values, single quotes, double quotes, backslash, trailing backslash, consecutive backslashes, backslash-before-quote, literal newlines, multiple variables, and missing-key cases.
+
 ## 0.4.0-SNAPSHOT
 
 ### Added
@@ -20,7 +30,7 @@ All notable changes to Prompt Butler are documented in this file.
 ### Changed
 
 - Search now uses tiered ranking (prefix/contains/title+tags+body) with bounded fuzzy fallback and relevance cutoffs.
-- Template compile substitution defaults to unquoted values; optional quoted substitution via preference (`quoteCompiledVariables`).
+- Template compile substitution supports optional quote wrapping of substituted values via the `quoteCompiledVariables` preference (see 0.4.1 for default change).
 - Preferences model expanded with `defaultCategory`, quote behavior, and persisted window bounds.
 - Toolbar updated with Shortcuts, Settings, and Undo Delete actions.
 
