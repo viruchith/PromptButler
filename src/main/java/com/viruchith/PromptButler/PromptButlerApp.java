@@ -213,16 +213,20 @@ public final class PromptButlerApp extends Application {
         }
 
         if (preferences.hasWindowBounds()) {
-            double w = Math.max(stage.getMinWidth(), preferences.getWindowWidth());
-            double h = Math.max(stage.getMinHeight(), preferences.getWindowHeight());
-            double[] xy = clampBoundsToScreens(preferences.getWindowX(), preferences.getWindowY(), w, h);
-            stage.setX(xy[0]);
-            stage.setY(xy[1]);
-            stage.setWidth(w);
-            stage.setHeight(h);
+            double persistedW = Math.max(stage.getMinWidth(), preferences.getWindowWidth());
+            double persistedH = Math.max(stage.getMinHeight(), preferences.getWindowHeight());
+            if (isObviouslyBadPersistedBounds(preferences.getWindowX(), preferences.getWindowY(), persistedW, persistedH)) {
+                AppLogger.get().warn("Ignoring invalid persisted window bounds; recentering window.");
+                applyCenteredDefaultBounds(stage);
+            } else {
+                double[] xy = clampBoundsToScreens(preferences.getWindowX(), preferences.getWindowY(), persistedW, persistedH);
+                stage.setX(xy[0]);
+                stage.setY(xy[1]);
+                stage.setWidth(persistedW);
+                stage.setHeight(persistedH);
+            }
         } else {
-            stage.setWidth(Math.max(stage.getWidth(), stage.getMinWidth()));
-            stage.setHeight(Math.max(stage.getHeight(), stage.getMinHeight()));
+            applyCenteredDefaultBounds(stage);
         }
         stage.xProperty().addListener((obs, oldValue, newValue) -> {
             preferences.setWindowX(newValue.doubleValue());
@@ -395,6 +399,74 @@ public final class PromptButlerApp extends Application {
      * Returns {@code [clampedX, clampedY]}.
      */
     private static final double MIN_VISIBLE_PX = 80.0;
+    private static final double EXTREME_BOUNDS_FACTOR = 10.0;
+
+    private static void applyCenteredDefaultBounds(Stage stage) {
+        double w = Math.max(stage.getWidth(), stage.getMinWidth());
+        double h = Math.max(stage.getHeight(), stage.getMinHeight());
+        stage.setWidth(w);
+        stage.setHeight(h);
+
+        // First launch/fallback: position explicitly instead of relying on platform defaults.
+        javafx.geometry.Rectangle2D primaryBounds = javafx.stage.Screen.getPrimary().getVisualBounds();
+        double centeredX = primaryBounds.getMinX() + Math.max(0.0, (primaryBounds.getWidth() - w) / 2.0);
+        double centeredY = primaryBounds.getMinY() + Math.max(0.0, (primaryBounds.getHeight() - h) / 2.0);
+        double[] xy = clampBoundsToScreens(centeredX, centeredY, w, h);
+        stage.setX(xy[0]);
+        stage.setY(xy[1]);
+    }
+
+    private static boolean isObviouslyBadPersistedBounds(double x, double y, double w, double h) {
+        if (!areFiniteAndPositiveBounds(x, y, w, h)) {
+            return true;
+        }
+
+        double unionMinX = Double.MAX_VALUE;
+        double unionMinY = Double.MAX_VALUE;
+        double unionMaxX = -Double.MAX_VALUE;
+        double unionMaxY = -Double.MAX_VALUE;
+        for (javafx.stage.Screen screen : javafx.stage.Screen.getScreens()) {
+            javafx.geometry.Rectangle2D vb = screen.getVisualBounds();
+            unionMinX = Math.min(unionMinX, vb.getMinX());
+            unionMinY = Math.min(unionMinY, vb.getMinY());
+            unionMaxX = Math.max(unionMaxX, vb.getMaxX());
+            unionMaxY = Math.max(unionMaxY, vb.getMaxY());
+        }
+        if (unionMinX >= unionMaxX || unionMinY >= unionMaxY) {
+            return false;
+        }
+
+        return areBoundsExtremeForUnion(x, y, w, h, unionMinX, unionMinY, unionMaxX, unionMaxY);
+    }
+
+    private static boolean areFiniteAndPositiveBounds(double x, double y, double w, double h) {
+        if (!Double.isFinite(x) || !Double.isFinite(y) || !Double.isFinite(w) || !Double.isFinite(h)) {
+            return false;
+        }
+        return w > 0.0 && h > 0.0;
+    }
+
+    private static boolean areBoundsExtremeForUnion(
+            double x,
+            double y,
+            double w,
+            double h,
+            double unionMinX,
+            double unionMinY,
+            double unionMaxX,
+            double unionMaxY) {
+        double unionWidth = unionMaxX - unionMinX;
+        double unionHeight = unionMaxY - unionMinY;
+        if (w > unionWidth * EXTREME_BOUNDS_FACTOR || h > unionHeight * EXTREME_BOUNDS_FACTOR) {
+            return true;
+        }
+
+        double minAllowedX = unionMinX - (unionWidth * EXTREME_BOUNDS_FACTOR);
+        double maxAllowedX = unionMaxX + (unionWidth * EXTREME_BOUNDS_FACTOR);
+        double minAllowedY = unionMinY - (unionHeight * EXTREME_BOUNDS_FACTOR);
+        double maxAllowedY = unionMaxY + (unionHeight * EXTREME_BOUNDS_FACTOR);
+        return x < minAllowedX || x > maxAllowedX || y < minAllowedY || y > maxAllowedY;
+    }
 
     private static double[] clampBoundsToScreens(double x, double y, double w, double h) {
         double unionMinX = Double.MAX_VALUE;

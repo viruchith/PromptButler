@@ -2,6 +2,16 @@
 
 All notable changes to Prompt Butler are documented in this file.
 
+## 0.4.2-SNAPSHOT
+
+### Fixed
+
+- Startup now ignores obviously invalid persisted window bounds (non-finite/negative/extreme values) and automatically recenters the window, preventing unusable launches after monitor layout or DPI changes.
+
+### Tests
+
+- Added `PromptButlerAppBoundsTest` coverage for persisted-window-bounds sanity checks, including invalid finite checks and extreme-value detection.
+
 ## 0.4.1-SNAPSHOT
 
 ### Fixed
