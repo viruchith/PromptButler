@@ -15,7 +15,7 @@ plugins {
 }
 
 group = 'com.viruchith.promptbutler'
-version = '0.4.1-SNAPSHOT'
+version = '0.4.2-SNAPSHOT'
 
 def envProfile = (project.findProperty('env') ?: 'prod').toString().toLowerCase()
 
