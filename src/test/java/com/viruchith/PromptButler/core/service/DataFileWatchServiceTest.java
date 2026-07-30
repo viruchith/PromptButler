@@ -18,7 +18,8 @@ class DataFileWatchServiceTest {
     void triggersCallbacksForPromptsAndPreferencesChanges(@TempDir Path dir) throws Exception {
         AtomicInteger promptsEvents = new AtomicInteger(0);
         AtomicInteger prefsEvents = new AtomicInteger(0);
-        CountDownLatch latch = new CountDownLatch(2);
+        CountDownLatch promptsLatch = new CountDownLatch(1);
+        CountDownLatch prefsLatch = new CountDownLatch(1);
 
         DataFileWatchService watcher = new DataFileWatchService(
                 dir,
@@ -26,18 +27,19 @@ class DataFileWatchServiceTest {
                 "preferences.json",
                 () -> {
                     promptsEvents.incrementAndGet();
-                    latch.countDown();
+                    promptsLatch.countDown();
                 },
                 () -> {
                     prefsEvents.incrementAndGet();
-                    latch.countDown();
+                    prefsLatch.countDown();
                 });
 
         watcher.start();
         try {
             Files.write(dir.resolve("prompts.json"), "{}".getBytes(StandardCharsets.UTF_8));
             Files.write(dir.resolve("preferences.json"), "{}".getBytes(StandardCharsets.UTF_8));
-            assertTrue(latch.await(5, TimeUnit.SECONDS), "Expected file watch callbacks were not triggered");
+            assertTrue(promptsLatch.await(5, TimeUnit.SECONDS), "Expected prompts callback was not triggered");
+            assertTrue(prefsLatch.await(5, TimeUnit.SECONDS), "Expected preferences callback was not triggered");
             assertTrue(promptsEvents.get() > 0, "Expected prompts callback to fire");
             assertTrue(prefsEvents.get() > 0, "Expected preferences callback to fire");
         } finally {

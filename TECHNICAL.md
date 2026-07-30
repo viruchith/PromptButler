@@ -2,7 +2,7 @@
 
 This document is for **developers** maintaining or extending the codebase. End-user usage remains in [README.md](README.md).
 
-Current project version: **`0.4.0-SNAPSHOT`**.
+Current project version: **`0.4.2-SNAPSHOT`**.
 
 ---
 
@@ -20,7 +20,7 @@ Current project version: **`0.4.0-SNAPSHOT`**.
 |-------|--------|
 | Language | Java **17** (Gradle Java toolchain) |
 | UI | **JavaFX 21** (OpenJFX via `org.openjfx.javafxplugin`) |
-| Build | **Gradle 8.7** wrapper, `application` plugin |
+| Build | **Gradle 8.14.5** wrapper, `application` + `shadow` plugins |
 | JSON | **Gson** 2.10.1 |
 | Global hotkey | **jNativeHook** 2.2.2 (`com.github.kwhat:jnativehook`) |
 | Icons (UI) | **Ikonli** Font Awesome 5 pack |
@@ -34,7 +34,7 @@ Current project version: **`0.4.0-SNAPSHOT`**.
 
 | Package | Role |
 |---------|------|
-| `com.viruchith.PromptButler` | **`PromptButlerApp`** — `Application` entry, stage/scene wiring, lifecycle (`start` / `stop`), hotkey and tray bootstrap |
+| `com.viruchith.PromptButler` | **`PromptButlerApp`** — `Application` entry, stage/scene wiring, lifecycle (`start` / `stop`), hotkey and tray bootstrap; **`Launcher`** — classpath-safe entrypoint used by fat JAR packaging |
 | `...core.clipboard` | **`ClipboardPort`** abstraction; JavaFX adapter in `ui.clipboard` |
 | `...core.logging` | **`AppLogger`** — thin stderr logger, verbosity tied to `BuildProfile` |
 | `...core.model` | Immutable **`PromptTemplate`**, **`UserPreferences`**, **`BuildProfile`**, **`AutoHideMode`** |
@@ -78,7 +78,7 @@ Current project version: **`0.4.0-SNAPSHOT`**.
 ### 4.4 Auxiliary services
 
 - **`TrayIntegration`** — AWT `SystemTray` + `TrayIcon`; menu **Open** / **Exit**; image from `/appicon.png` scaled for tray. **Exit** calls `System.exit(0)` directly.
-- **`AutoHideController`** — listens to `stage.focusedProperty`; applies `UserPreferences.autoHideMode` (`OPACITY`, `MINIMIZE`, `TRAY`, `HIDE`), with a suspend guard for app-owned modal flows (Settings/dialogs).
+- **`AutoHideController`** — listens to `stage.focusedProperty`; applies `UserPreferences.autoHideMode` (`OPACITY`, `MINIMIZE`, `TRAY`, `HIDE`) after a deferred FX pulse to let ownership/focus state settle, and includes a suspend guard for app-owned modal flows (Settings/dialogs). This avoids false auto-hide when focus transitions into owned child windows (for example variable-entry stage).
 - **`JNativeHookHotkeyService`** — registers global key listener; hotkey handler **must** `Platform.runLater` when touching the Stage (native thread vs FX thread).
 - **`DataFileWatchService`** — watches the data directory and triggers FX-thread reloads for `prompts.json` and `preferences.json`.
 - **`stop()`** — unregisters hotkey listener and removes tray icon. Note: only reached if `Platform.exit()` is called (e.g. from error paths in `start()`); normal quit bypasses this via `System.exit(0)` (see §4.5).
@@ -113,7 +113,7 @@ Current project version: **`0.4.0-SNAPSHOT`**.
 | **Title icon** | `ImageView` from `/appicon.png` |
 | **Single-click row** (delayed) | `PauseTransition` ~320 ms; cancelled on double-click; opens **detail** `Stage` (`WINDOW_MODAL`) |
 | **Double-click / Enter on list** | `onTemplateChosen` — no `{{vars}}` → clipboard + hide overlay with short `PauseTransition` delay (avoids Glass issues); with vars → **`openVariableParametersWindow`** (modeless `Stage`, `Modality.NONE`) |
-| **Variable window** | `commitVariables` closes variable stage then **`copyPlainTextThenMaybeHide(..., false)`** so main overlay stays visible |
+| **Variable window** | `commitVariables` closes variable stage then **`copyPlainTextThenMaybeHide(..., false)`** so main overlay stays visible; focus handoff to this owned modeless stage no longer triggers auto-hide side effects because defocus handling is deferred and re-checked |
 | **Escape** | If variable window logic applies, close it; else **`hideOverlay()`** (hide stage, clear clipboard adapter retained buffers, close child stages) |
 | **Import / Export** | `ImportExportService` + file choosers; import remaps UUIDs, export supports selected rows, drag/drop import supported |
 | **Dialogs** | Theme stylesheet URL applied manually to `DialogPane` / `Alert` (dialogs do not inherit main scene CSS); Settings flow suspends auto-hide to avoid unintended tray hide |
@@ -157,7 +157,7 @@ Current project version: **`0.4.0-SNAPSHOT`**.
 
 - **Unit tests** live under `src/test/java` mirroring production packages.
 - **JaCoCo** coverage verification (`check` task) is scoped in `build.gradle` **`afterEvaluate`** to **`core/**`** only — UI and OS integration are excluded from the **80% line** gate by design.
-- ** Mockito** used where repositories or filesystem edges need isolation.
+- **Mockito** is used where repositories or filesystem edges need isolation.
 
 ---
 

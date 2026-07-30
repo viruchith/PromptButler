@@ -47,7 +47,16 @@ public final class AutoHideController {
                     }
                     return;
                 }
-                applyDefocus();
+                // Focus can briefly be on no window while moving from the main stage to an owned child stage.
+                // Defer auto-hide so ownership/focus state is accurate before applying minimize/hide behavior.
+                Platform.runLater(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (!stage.isFocused()) {
+                            applyDefocus();
+                        }
+                    }
+                });
             }
         };
         stage.focusedProperty().addListener(listener);
