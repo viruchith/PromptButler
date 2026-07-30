@@ -7,6 +7,7 @@ All notable changes to Prompt Butler are documented in this file.
 ### Fixed
 
 - Startup now ignores obviously invalid persisted window bounds (non-finite/negative/extreme values) and automatically recenters the window, preventing unusable launches after monitor layout or DPI changes.
+- Auto-hide now defers defocus handling until JavaFX focus settles, preventing owned app windows (for example the variable-entry window) from unintentionally triggering main-window minimize/hide behavior when switching focus.
 
 ### Tests
 
