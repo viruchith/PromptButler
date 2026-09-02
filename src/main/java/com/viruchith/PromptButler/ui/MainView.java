@@ -28,6 +28,9 @@ import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
 import javafx.scene.control.SelectionMode;
+import javafx.scene.control.SplitPane;
+import javafx.scene.control.Tab;
+import javafx.scene.control.TabPane;
 import javafx.scene.control.TextInputDialog;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
@@ -45,6 +48,7 @@ import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
+import javafx.scene.web.WebView;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
@@ -99,6 +103,7 @@ public final class MainView extends VBox {
     private final UserPreferences preferences;
     private final Consumer<UserPreferences> preferencesSaver;
     private final Consumer<Boolean> themeSwitcher;
+    private static final String UNICODE_INPUT_FONT_STACK = "\"Segoe UI Emoji\", \"Apple Color Emoji\", \"Noto Color Emoji\", \"Segoe UI\", \"Nirmala UI\", \"Yu Gothic UI\", \"Malgun Gothic\", sans-serif";
 
     private final TextField searchField = new TextField();
     private final ComboBox<String> categoryFilter = new ComboBox<String>();
@@ -140,6 +145,7 @@ public final class MainView extends VBox {
         this.preferencesSaver = Objects.requireNonNull(preferencesSaver, "preferencesSaver");
         this.themeSwitcher = Objects.requireNonNull(themeSwitcher, "themeSwitcher");
         configureSearch();
+        applyUnicodeFriendlyInputFonts();
         configureList();
         configureToolbar();
         Label appTitle = new Label("Prompt Butler");
@@ -196,6 +202,11 @@ public final class MainView extends VBox {
             // leave empty if resource missing or unreadable
         }
         return iv;
+    }
+
+    private void applyUnicodeFriendlyInputFonts() {
+        searchField.setStyle("-fx-font-family: " + UNICODE_INPUT_FONT_STACK + ";");
+        categoryFilter.setStyle("-fx-font-family: " + UNICODE_INPUT_FONT_STACK + ";");
     }
 
     /**
@@ -258,7 +269,7 @@ public final class MainView extends VBox {
         String implVer = MainView.class.getPackage() != null
                 ? MainView.class.getPackage().getImplementationVersion()
                 : null;
-        String versionLine = (implVer == null || implVer.isEmpty()) ? "0.4.1-SNAPSHOT" : implVer;
+        String versionLine = (implVer == null || implVer.isEmpty()) ? "0.4.3" : implVer;
         Label version = new Label("Version " + versionLine);
         version.getStyleClass().add("preview-label");
 
@@ -987,7 +998,7 @@ public final class MainView extends VBox {
     /* ----- Clipboard: delegate to ClipboardPort; optional stage hide (defers hide to avoid Glass issues) ----- */
 
     private void copyToClipboardAndHide(String text) {
-        copyPlainTextThenMaybeHide(text, true);
+        copyPlainTextThenMaybeHide(text, true, preferences.getAutoHideMode());
     }
 
     /**
@@ -995,6 +1006,10 @@ public final class MainView extends VBox {
      * mouse/keyboard handling (avoids crashes when closing from double-click / Enter).
      */
     private void copyPlainTextThenMaybeHide(String text, boolean hideAfter) {
+        copyPlainTextThenMaybeHide(text, hideAfter, AutoHideMode.HIDE);
+    }
+
+    private void copyPlainTextThenMaybeHide(String text, boolean hideAfter, AutoHideMode hideMode) {
         final String payload = text == null ? "" : text;
         if (!hideAfter) {
             clipboard.copyPlainText(payload);
@@ -1005,10 +1020,30 @@ public final class MainView extends VBox {
         waitRelease.setOnFinished(ev -> {
             clipboard.copyPlainText(payload);
             PauseTransition waitClipboard = new PauseTransition(Duration.millis(60));
-            waitClipboard.setOnFinished(ev2 -> hideOverlay());
+            waitClipboard.setOnFinished(ev2 -> applyPostCopyHide(hideMode));
             waitClipboard.playFromStart();
         });
         waitRelease.playFromStart();
+    }
+
+    private void applyPostCopyHide(AutoHideMode hideMode) {
+        AutoHideMode effectiveMode = hideMode == null ? AutoHideMode.HIDE : hideMode;
+        closePromptDetailWindow();
+        closeVariableParametersWindow();
+        switch (effectiveMode) {
+            case MINIMIZE:
+                stage.setIconified(true);
+                break;
+            case OPACITY:
+                stage.setOpacity(Math.max(0.01, preferences.getDefocusOpacity()));
+                break;
+            case TRAY:
+            case HIDE:
+            default:
+                stage.hide();
+                break;
+        }
+        clipboard.clearRetainedSensitiveData();
     }
 
     private void copyTemplateBodyToClipboard(PromptTemplate t, boolean hideAfter) {
@@ -1048,10 +1083,7 @@ public final class MainView extends VBox {
     }
 
     private void hideOverlay() {
-        closePromptDetailWindow();
-        closeVariableParametersWindow();
-        stage.hide();
-        clipboard.clearRetainedSensitiveData();
+        applyPostCopyHide(AutoHideMode.HIDE);
     }
 
     /* ----- Toolbar: JSON import/export ----- */
@@ -1142,16 +1174,13 @@ public final class MainView extends VBox {
         idCaption.getStyleClass().add("preview-label");
         idCaption.setWrapText(true);
 
-        TextArea content = new TextArea(PromptTextFormatter.formatPromptDetailTextArea(t));
-        content.setEditable(false);
-        content.setWrapText(true);
-        VBox.setVgrow(content, Priority.ALWAYS);
-        TextArea markdownPreview = new TextArea(MarkdownPreviewRenderer.render(t.getBody()));
-        markdownPreview.setEditable(false);
-        markdownPreview.setWrapText(true);
-        markdownPreview.setPromptText("Markdown preview");
-        markdownPreview.getStyleClass().add("preview-text");
-        VBox.setVgrow(markdownPreview, Priority.ALWAYS);
+        Label metadata = new Label(PromptTextFormatter.formatPromptMetadataSummary(t));
+        metadata.getStyleClass().add("preview-label");
+        metadata.setWrapText(true);
+
+        TextArea content = buildReadOnlyPreviewArea(PromptTextFormatter.nullToEmpty(t.getBody()), "Prompt body");
+        WebView markdownPreview = buildMarkdownPreview(PromptTextFormatter.nullToEmpty(t.getBody()));
+        SplitPane previewSplit = buildPromptPreviewSplit(content, markdownPreview);
 
         Button copyB = new Button("Copy");
         styleToolbarButton(copyB, FontAwesomeSolid.COPY, "Copy prompt body to clipboard.");
@@ -1203,11 +1232,11 @@ public final class MainView extends VBox {
         closeB.setOnAction(e -> closePromptDetailWindow());
 
         HBox actions = new HBox(8, copyB, favB, editB, duplicateB, delB, closeB);
-        VBox root = new VBox(10, idCaption, content, new Label("Rendered preview"), markdownPreview, actions);
+        VBox root = new VBox(10, idCaption, metadata, previewSplit, actions);
         root.getStyleClass().add("app-panel");
         root.setPadding(new Insets(12));
 
-        Scene scene = new Scene(root, 540, 460);
+        Scene scene = new Scene(root, 660, 500);
         copyApplicationStylesheetsTo(scene);
         detail.setScene(scene);
         detail.setOnHidden(e -> promptDetailStage = null);
@@ -1232,7 +1261,11 @@ public final class MainView extends VBox {
         bodyArea.setPromptText("Prompt body…");
         bodyArea.setPrefRowCount(8);
         bodyArea.setWrapText(true);
+        WebView bodyPreview = buildMarkdownPreview("");
         TextField tagsField = new TextField();
+        applyUnicodeFriendlyFont(titleField);
+        applyUnicodeFriendlyFont(bodyArea);
+        applyUnicodeFriendlyFont(tagsField);
         tagsField.setPromptText("comma, separated, tags");
         ComboBox<String> categoryDropdown = new ComboBox<String>();
         categoryDropdown.setPromptText("Category");
@@ -1268,6 +1301,7 @@ public final class MainView extends VBox {
         if (isEdit) {
             titleField.setText(PromptTextFormatter.nullToEmpty(existing.getTitle()));
             bodyArea.setText(PromptTextFormatter.nullToEmpty(existing.getBody()));
+            loadMarkdownPreview(bodyPreview, existing.getBody());
             tagsField.setText(PromptTextFormatter.tagsCsvForEditor(existing.getTags()));
             String editCategory = InputText.trimToEmpty(existing.getCategory());
             if (editCategory.isEmpty()) {
@@ -1282,12 +1316,14 @@ public final class MainView extends VBox {
         grid.add(new Label("Title"), 0, r);
         grid.add(titleField, 1, r++);
         grid.add(new Label("Body"), 0, r);
-        grid.add(bodyArea, 1, r++);
+        grid.add(buildEditorBodyTabs(bodyArea, bodyPreview), 1, r++);
         grid.add(new Label("Tags"), 0, r);
         grid.add(tagsField, 1, r);
         r++;
         grid.add(new Label("Category"), 0, r);
         grid.add(categoryRow, 1, r);
+        bodyArea.textProperty().addListener((obs, oldValue, newValue) ->
+                loadMarkdownPreview(bodyPreview, newValue));
         dialog.getDialogPane().setContent(grid);
         attachLightDialogStyles(dialog.getDialogPane());
 
@@ -1353,6 +1389,67 @@ public final class MainView extends VBox {
             return Optional.empty();
         }
         return Optional.of(category);
+    }
+
+    private static TextArea buildReadOnlyPreviewArea(String text, String promptText) {
+        TextArea area = new TextArea(PromptTextFormatter.nullToEmpty(text));
+        area.setEditable(false);
+        area.setWrapText(true);
+        area.setPromptText(promptText);
+        area.getStyleClass().add("preview-text");
+        applyUnicodeFriendlyFont(area);
+        VBox.setVgrow(area, Priority.ALWAYS);
+        return area;
+    }
+
+    private static void applyUnicodeFriendlyFont(Node node) {
+        node.setStyle("-fx-font-family: " + UNICODE_INPUT_FONT_STACK + ";");
+    }
+
+    private WebView buildMarkdownPreview(String markdown) {
+        WebView webView = new WebView();
+        webView.getStyleClass().add("markdown-preview");
+        webView.setContextMenuEnabled(false);
+        webView.setMinHeight(240);
+        webView.setPrefHeight(280);
+        loadMarkdownPreview(webView, markdown);
+        VBox.setVgrow(webView, Priority.ALWAYS);
+        return webView;
+    }
+
+    private void loadMarkdownPreview(WebView webView, String markdown) {
+        webView.getEngine().setJavaScriptEnabled(true);
+        webView.getEngine().setUserStyleSheetLocation(null);
+        webView.getEngine().setCreatePopupHandler(features -> null);
+        webView.getEngine().setOnAlert(event -> { });
+        webView.getEngine().setConfirmHandler(param -> false);
+        webView.getEngine().setPromptHandler(param -> "");
+        String html = SafeMarkdownRenderer.renderDocument(markdown, preferences.isDarkMode());
+        String dataUrl = "data:text/html;charset=UTF-8;base64," + 
+            java.util.Base64.getEncoder().encodeToString(html.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        webView.getEngine().load(dataUrl);
+    }
+
+    private static SplitPane buildPromptPreviewSplit(TextArea bodyArea, WebView previewArea) {
+        VBox bodyBox = new VBox(6, new Label("Prompt body"), bodyArea);
+        VBox previewBox = new VBox(6, new Label("Rendered preview"), previewArea);
+        VBox.setVgrow(bodyArea, Priority.ALWAYS);
+        VBox.setVgrow(previewArea, Priority.ALWAYS);
+        SplitPane split = new SplitPane(bodyBox, previewBox);
+        split.setDividerPositions(0.52);
+        VBox.setVgrow(split, Priority.ALWAYS);
+        return split;
+    }
+
+    private static TabPane buildEditorBodyTabs(TextArea bodyArea, WebView previewArea) {
+        Tab writeTab = new Tab("Write", bodyArea);
+        writeTab.setClosable(false);
+        Tab previewTab = new Tab("Preview", previewArea);
+        previewTab.setClosable(false);
+        TabPane tabs = new TabPane(writeTab, previewTab);
+        tabs.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
+        tabs.setPrefHeight(280);
+        return tabs;
     }
 
     private void refreshDeleteCategoryDropdown(ComboBox<String> dropdown) {

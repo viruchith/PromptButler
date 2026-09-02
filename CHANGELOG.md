@@ -2,6 +2,19 @@
 
 All notable changes to Prompt Butler are documented in this file.
 
+## 0.4.3
+
+### Added
+
+- Prompt create/edit dialogs now include a live markdown preview tab so authors can switch between raw prompt text and rendered output while editing.
+- Added WebView-based markdown rendering backed by Flexmark and Jsoup, with support for richer GitHub-flavored markdown structures, Unicode text normalization, and emoji-safe preview output.
+
+### Changed
+
+- Prompt detail now uses a split view with raw body and rendered markdown preview side by side, making long prompts easier to inspect without losing the source text.
+- `AppLogger` now routes through **SLF4J + Logback** using a bundled `logback.xml`, preserving the existing facade while making log formatting and backend behavior configurable.
+- Markdown preview rendering now produces sanitized HTML for JavaFX `WebView`, keeping theme-aware rendering and future Mermaid/highlighting integration centralized.
+
 ## 0.4.2-SNAPSHOT
 
 ### Fixed

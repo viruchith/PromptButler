@@ -57,4 +57,36 @@ class JsonPromptRepositoryTest {
         assertEquals(1, list.size());
         assertEquals(2L, list.get(0).getUsageCount());
     }
+
+    @Test
+    void roundTripPreservesUnicodeAndEmoji(@TempDir Path dir) throws Exception {
+        Path f = dir.resolve("prompts.json");
+        JsonPromptRepository repo = new JsonPromptRepository(f, validator);
+        PromptTemplate template = new PromptTemplate(
+                "unicode",
+                "தமிழ் 😀",
+                "हिन्दी 中文 日本語 한국어 Русский العربية עברית ไทย Tiếng Việt 👨🏽‍💻",
+                Arrays.asList("emoji ✅", "עברית"));
+        repo.saveAll(Arrays.asList(template));
+        List<PromptTemplate> loaded = repo.loadAll();
+        assertEquals(1, loaded.size());
+        assertEquals(template.getTitle(), loaded.get(0).getTitle());
+        assertEquals(template.getBody(), loaded.get(0).getBody());
+        assertEquals(template.getTags(), loaded.get(0).getTags());
+    }
+
+    @Test
+    void roundTripPreservesRequestedLanguageSet(@TempDir Path dir) throws Exception {
+        Path f = dir.resolve("prompts.json");
+        JsonPromptRepository repo = new JsonPromptRepository(f, validator);
+        String multilingual = "English | Français | Deutsch | Español | Português | Italiano | Nederlands | Polski | Türkçe | Tiếng Việt | "
+                + "Русский | Українська | Български | Ελληνικά | हिन्दी | தமிழ் | తెలుగు | ಕನ್ನಡ | മലയാളം | मराठी | বাংলা | ગુજરાતી | ਪੰਜਾਬੀ | "
+                + "العربية | עברית | فارسی | اردو | 简体中文 | 繁體中文 | 日本語 | 한국어 | ไทย | Bahasa Indonesia | Bahasa Melayu | Kiswahili";
+        PromptTemplate template = new PromptTemplate("langs", multilingual, multilingual + " ✅ 👨🏽‍💻", Arrays.asList("日本語", "العربية", "தமிழ்"));
+        repo.saveAll(Arrays.asList(template));
+        PromptTemplate loaded = repo.loadAll().get(0);
+        assertEquals(multilingual, loaded.getTitle());
+        assertEquals(multilingual + " ✅ 👨🏽‍💻", loaded.getBody());
+        assertEquals(Arrays.asList("日本語", "العربية", "தமிழ்"), loaded.getTags());
+    }
 }

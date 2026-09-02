@@ -3,10 +3,20 @@ package com.viruchith.PromptButler.ui;
 import com.viruchith.PromptButler.core.model.PromptTemplate;
 import com.viruchith.PromptButler.core.util.InputText;
 
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.time.format.FormatStyle;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 final class PromptTextFormatter {
+
+    private static final DateTimeFormatter LOCAL_DATE_TIME_FORMATTER =
+            DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM)
+                    .withLocale(Locale.getDefault())
+                    .withZone(ZoneId.systemDefault());
 
     private PromptTextFormatter() {
     }
@@ -21,9 +31,25 @@ final class PromptTextFormatter {
         sb.append("Category: ").append(nullToEmpty(t.getCategory())).append("\n");
         sb.append("Tags: ").append(tagsCsvForEditor(t.getTags())).append("\n");
         sb.append("Usage count: ").append(t.getUsageCount()).append("\n");
-        sb.append("Last used (epoch ms): ").append(t.getLastUsedEpochMillis()).append("\n\n");
+        sb.append("Last used: ").append(formatEpochMillis(t.getLastUsedEpochMillis())).append("\n\n");
         sb.append(nullToEmpty(t.getBody()));
         return sb.toString();
+    }
+
+    static String formatPromptMetadataSummary(PromptTemplate t) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("Category: ").append(nullToEmpty(t.getCategory()));
+        sb.append("   Tags: ").append(tagsCsvForEditor(t.getTags()));
+        sb.append("   Usage count: ").append(t.getUsageCount());
+        sb.append("   Last used: ").append(formatEpochMillis(t.getLastUsedEpochMillis()));
+        return sb.toString();
+    }
+
+    static String formatEpochMillis(long epochMillis) {
+        if (epochMillis <= 0L) {
+            return "Never";
+        }
+        return LOCAL_DATE_TIME_FORMATTER.format(Instant.ofEpochMilli(epochMillis));
     }
 
     static String formatTagsSuffixForCell(List<String> tags) {

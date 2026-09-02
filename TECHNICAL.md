@@ -2,7 +2,7 @@
 
 This document is for **developers** maintaining or extending the codebase. End-user usage remains in [README.md](README.md).
 
-Current project version: **`0.4.2-SNAPSHOT`**.
+Current project version: **`0.4.3`**.
 
 ---
 
@@ -22,11 +22,25 @@ Current project version: **`0.4.2-SNAPSHOT`**.
 | UI | **JavaFX 21** (OpenJFX via `org.openjfx.javafxplugin`) |
 | Build | **Gradle 8.14.5** wrapper, `application` + `shadow` plugins |
 | JSON | **Gson** 2.10.1 |
+| Markdown | **Flexmark** 0.64.8 + hardened in-process sanitization + JavaFX **WebView** |
+| Logging | **SLF4J 2.0** facade with **Logback 1.5** backend |
 | Global hotkey | **jNativeHook** 2.2.2 (`com.github.kwhat:jnativehook`) |
 | Icons (UI) | **Ikonli** Font Awesome 5 pack |
 | Tests | **JUnit 5**, **Mockito**; **JaCoCo** on `core` tree (see `build.gradle`) |
 
-**JavaFX modules** enabled in `build.gradle`: `javafx.controls`, `javafx.graphics` (sufficient for current UI; add `javafx.swing` only if you introduce Swing interop).
+**JavaFX modules** enabled in `build.gradle`: `javafx.controls`, `javafx.graphics`, `javafx.web`.
+
+```mermaid
+flowchart LR
+    Gradle[Gradle build] --> App[PromptButlerApp]
+    App --> UI[ui package]
+    App --> Core[core package]
+    App --> OS[os package]
+    Core --> Repo[repository/service/model/storage]
+    UI --> Clipboard[ui.clipboard]
+    OS --> Hook[jNativeHookHotkeyService]
+    Core --> Logging[AppLogger / SLF4J / Logback]
+```
 
 ---
 
@@ -36,12 +50,12 @@ Current project version: **`0.4.2-SNAPSHOT`**.
 |---------|------|
 | `com.viruchith.PromptButler` | **`PromptButlerApp`** — `Application` entry, stage/scene wiring, lifecycle (`start` / `stop`), hotkey and tray bootstrap; **`Launcher`** — classpath-safe entrypoint used by fat JAR packaging |
 | `...core.clipboard` | **`ClipboardPort`** abstraction; JavaFX adapter in `ui.clipboard` |
-| `...core.logging` | **`AppLogger`** — thin stderr logger, verbosity tied to `BuildProfile` |
+| `...core.logging` | **`AppLogger`** — compatibility facade over SLF4J/Logback; verbose info and stack traces still follow `BuildProfile` |
 | `...core.model` | Immutable **`PromptTemplate`**, **`UserPreferences`**, **`BuildProfile`**, **`AutoHideMode`** |
 | `...core.repository` | **`PromptRepository`** interface; **`JsonPromptRepository`** — Gson DTOs, file I/O, schema validation hook |
 | `...core.service` | **FuzzySearchService**, **VariableParser**, **TemplateCompiler**, **JsonSchemaValidator**, **ImportExportService**, **RecoveryService**, **PreferencesRepository**, **DataFileWatchService** |
 | `...core.storage` | **`StoragePaths`** — data directory resolution; **`SafePathResolver`** — prevents path escape when resolving children |
-| `...core.util` | **`InputText`** — shared `trim` normalization for UI and model |
+| `...core.util` | **`InputText`** — shared trim + Unicode NFC normalization for UI and model |
 | `...os` | **`JNativeHookHotkeyService`** — low-level keyboard listener, maps to overlay toggle |
 | `...ui` | **`MainView`**, **`MainViewModel`**, **`OverlayStageFactory`**, **`TrayIntegration`**, **`AutoHideController`**, **`UiIcons`**, dialogs and list chrome |
 
@@ -54,7 +68,7 @@ Current project version: **`0.4.2-SNAPSHOT`**.
 ### 4.1 `start(Stage)`
 
 1. **`Platform.setImplicitExit(false)`** — closing/hiding the main stage does **not** terminate the JVM; quit is explicit (toolbar **Quit**, tray **Exit**, or `Platform.exit()` from error paths).
-2. **`BuildProfile.current()`** — reads `prompt.butler.profile` (`dev` vs default `prod`): toggles verbose logging and dev-only resources.
+2. **`BuildProfile.current()`** — reads `prompt.butler.profile` (`dev` vs default `prod`): toggles verbose logging behavior and dev-only resources.
 3. Delegates to **`startApplication`** inside try/catch; fatal errors show a JavaFX `Alert` then `Platform.exit()`.
 
 ### 4.2 Data directory and persistence
@@ -70,10 +84,22 @@ Current project version: **`0.4.2-SNAPSHOT`**.
 2. **`MainView`** — root content: title strip (icon + drag region), search, `ListView`, toolbar, status.
 3. **`StackPane` shell** — holds `MainView` (top-left) and a small **south-east `Region`** used as a **resize grip** (mouse drag updates `stage` width/height with minimum bounds).
 4. **`Scene`** — transparent fill (`OverlayStageFactory.applySceneBackgroundTransparent`) so rounded `app-panel` CSS shows correctly on the desktop.
-5. **Stylesheets** — `/styles/overlay.css`, `overlay-dev.css`, or `overlay-dark.css` from classpath (theme is preference-driven at runtime).
+5. **Stylesheets** — `/styles/overlay.css`, `overlay-dev.css`, or `overlay-dark.css` from classpath (theme is preference-driven at runtime). These now also style preview tabs and the split markdown/raw prompt view.
 6. **`stage.setOnCloseRequest`** — **consumes** the default close action and **hides** the stage (overlay pattern, not process exit).
 7. **`loadApplicationIcon`** — adds `/appicon.png` to `stage.getIcons()` for taskbar / OS integration.
 8. **Content-aware minimum size** — startup computes minimum stage dimensions from `MainView` preferred size so toolbar/action buttons are not compressed on small initial windows.
+
+```mermaid
+flowchart TD
+    Stage[JavaFX Stage] --> Shell[StackPane shell]
+    Shell --> MainView[MainView app panel]
+    Shell --> Grip[Resize grip]
+    MainView --> Title[Title strip]
+    MainView --> Search[Search + category filter]
+    MainView --> List[ListView]
+    MainView --> Toolbar[Toolbar]
+    MainView --> Status[Status label]
+```
 
 ### 4.4 Auxiliary services
 
@@ -112,7 +138,9 @@ Current project version: **`0.4.2-SNAPSHOT`**.
 | **Title strip drag** | `installUndecoratedStageDrag` — no native title bar under `TRANSPARENT`; updates `stage.setX/Y` from screen mouse delta |
 | **Title icon** | `ImageView` from `/appicon.png` |
 | **Single-click row** (delayed) | `PauseTransition` ~320 ms; cancelled on double-click; opens **detail** `Stage` (`WINDOW_MODAL`) |
+| **Detail preview** | Detail dialog now uses a `SplitPane` to keep **Prompt body** and a WebView-based rendered preview visible together |
 | **Double-click / Enter on list** | `onTemplateChosen` — no `{{vars}}` → clipboard + hide overlay with short `PauseTransition` delay (avoids Glass issues); with vars → **`openVariableParametersWindow`** (modeless `Stage`, `Modality.NONE`) |
+| **Prompt editor preview** | New/Edit dialog uses a `TabPane` with **Write** and **Preview** tabs; preview is updated live in a JavaFX `WebView` via `SafeMarkdownRenderer` |
 | **Variable window** | `commitVariables` closes variable stage then **`copyPlainTextThenMaybeHide(..., false)`** so main overlay stays visible; focus handoff to this owned modeless stage no longer triggers auto-hide side effects because defocus handling is deferred and re-checked |
 | **Escape** | If variable window logic applies, close it; else **`hideOverlay()`** (hide stage, clear clipboard adapter retained buffers, close child stages) |
 | **Import / Export** | `ImportExportService` + file choosers; import remaps UUIDs, export supports selected rows, drag/drop import supported |
@@ -126,6 +154,66 @@ Current project version: **`0.4.2-SNAPSHOT`**.
 ### 5.4 `OverlayStageFactory`
 
 - Centralizes **transparent** stage style and **transparent scene fill** so all callers share the same overlay contract.
+
+### 5.5 Markdown preview + logging
+
+- **`SafeMarkdownRenderer`** centralizes Flexmark parsing, HTML generation, sanitization, URI policy enforcement, Mermaid/code block limiting, inline preview styling, and theme-aware HTML document generation for JavaFX `WebView`.
+- It supports GitHub-flavored markdown features including tables, task lists, strikethrough, footnotes, definition lists, autolinks, typographic quotes, fenced code blocks, Mermaid diagrams, and bundled highlight.js syntax highlighting.
+- Emoji rendering in preview follows the last known working strategy from the earlier WebView markdown renderer: after markdown HTML generation, emoji code points are preserved as HTML entities and then rendered by the platform emoji font stack inside JavaFX `WebView`.
+- The preview HTML prefers platform color emoji fonts (`Segoe UI Emoji`, `Apple Color Emoji`, `Noto Color Emoji`) ahead of symbol fallbacks so native emoji stay colorized where the embedded WebKit engine supports them.
+- Input is normalized to Unicode NFC before parsing so composed/decomposed user input remains stable across editing, persistence, and preview.
+- **`src/main/resources/logback.xml`** configures the current console logging backend.
+- `AppLogger` remains the migration seam: call sites stay unchanged while Logback now controls formatting/output.
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant MainView
+    participant Renderer as SafeMarkdownRenderer
+    participant Logger as AppLogger/SLF4J
+    participant Logback
+
+    User->>MainView: Edit prompt body
+    MainView->>Renderer: render(body)
+    Renderer-->>MainView: sanitized + policy-hardened HTML document
+    User->>MainView: Save / open detail
+    MainView->>Logger: warn/info/error(...)
+    Logger->>Logback: delegate log event
+    Logback-->>Logger: formatted output
+```
+
+### 5.6 Markdown security model
+
+```mermaid
+flowchart LR
+    Input[User / imported markdown] --> Normalize[InputText NFC normalization]
+    Normalize --> Parse[Flexmark parser]
+    Parse --> Html[Escaped HTML rendering]
+    Html --> Emoji[Emoji entity preservation]
+    Emoji --> Sanitize[SafeMarkdownRenderer policy enforcement]
+    Sanitize --> Policy[Link, image, Mermaid, size policies]
+    Policy --> WebView[Hardened WebView]
+```
+
+| Surface | Control |
+|---------|---------|
+| Raw HTML in markdown | Flexmark renders with `escapeHtml(true)`, so embedded HTML is shown as inert text rather than executed markup |
+| Script/event/style injection | Script/style/iframe/SVG blocks, inline event handlers, and dangerous URI-bearing attributes are stripped or neutralized before WebView render |
+| URI abuse | Only `http`, `https`, and optional `mailto` are preserved on anchors |
+| Image abuse | Preview blocks all images, including remote and `file:` URLs |
+| Mermaid abuse | Only fenced `language-mermaid` blocks are converted; oversized diagrams are replaced with a warning |
+| Unicode abuse | Renderer warns on bidi override chars, invisible formatting chars, and suspicious mixed Latin/Cyrillic/Greek text |
+| DoS via huge content | Document, rendered HTML, DOM node, table, code block, and Mermaid size limits |
+| WebView abuse | Context menu disabled; popup, alert, confirm, and prompt handlers suppressed in `MainView` |
+
+**Library decision:** the project keeps the existing in-process dependency footprint and currently uses a dedicated `SafeMarkdownRenderer` hardening layer rather than introducing OWASP Java HTML Sanitizer or AntiSamy. That keeps preview behavior deterministic and centralizes rendering policy in one class while preserving the working emoji-rendering path in JavaFX WebView. If the preview later needs a broader HTML allow-list, OWASP Java HTML Sanitizer is the preferred upgrade path over AntiSamy.
+
+### 5.7 Security acceptance notes
+
+1. **Variables:** placeholder substitution still happens on plain text, and preview sanitization occurs only after the final markdown text is produced. This preserves the required ordering: resolve variables → parse markdown → sanitize HTML.
+2. **Clipboard/export:** compiled and raw prompt text are copied/exported without renderer mutation by design; the preview is a safety boundary for display, not a content-rewriting boundary.
+3. **Logging:** markdown and compiled prompt bodies should not be logged. Use metadata-only logging such as lengths, counts, file paths, and exception summaries.
+4. **Known rendering caveat:** the current preview path is optimized to preserve emoji rendering by delegating glyph shaping and color support to the host system's emoji fonts inside WebView. Inline images remain intentionally blocked, and any future broadening of HTML/media support must be evaluated against the existing threat model first.
 
 ---
 
@@ -144,12 +232,25 @@ Current project version: **`0.4.2-SNAPSHOT`**.
 |---------|---------|
 | `./gradlew run` / `.\gradlew.bat run` | Run app; forks JVM with `prompt.butler.profile` default **prod** |
 | `./gradlew run -Penv=dev` | Dev profile: verbose logs, dev CSS, dev seed when store empty |
+| `./gradlew runDebugVisibleLogs` | Dedicated JavaExec task for debug sessions with dev profile and visible console logging |
 | `./gradlew run -PkeepUftJvmHooks=true` | Rare: keep UFT-injected JVM hooks on app process (often breaks JavaFX) |
 | `./gradlew test` / `check` | Unit tests + JaCoCo gate on `com.viruchith.PromptButler.core` |
 | `./gradlew installDist` | Application distribution under `build/install/prompt-butler/` |
 | `./gradlew shadowJar` | Cross-platform fat JAR → `build/libs/prompt-butler-*-all.jar`; bundles JavaFX natives for win / linux / mac / mac-aarch64; run with `java --add-exports=... --add-opens=... -jar` |
 
 **`installDist` vs `./gradlew run`:** Gradle’s default **`installDist`** start scripts put everything on **`-classpath`**, which is **not** enough for OpenJFX 21: the JVM reports “JavaFX runtime components are missing”. **`build.gradle`** therefore patches **`startScripts`** so platform **`javafx-{base,graphics,controls}-*-(win|linux|mac|mac-aarch64).jar`** entries move to **`JAVAFX_MODULE_PATH`** and the **`java`** line gains **`--module-path "%JAVAFX_MODULE_PATH%"`** / **`--add-modules javafx.controls,javafx.graphics,javafx.base`** (Unix/Cygwin: same idea, plus **`cygpath`** for the module path). Other deps stay on **`-classpath`**. **`applicationDefaultJvmArgs`** Glass **`--add-exports` / `--add-opens`** are valid in that layout. The **`:run`** task still uses the JavaFX Gradle plugin’s module path; it only strips UFT-injected env vars on the app process. The generated scripts also **clear** **`JAVA_TOOL_OPTIONS`** / **`_JAVA_OPTIONS`** before launch when UFT injects agents that break Glass.
+
+### 7.1 Debugging with visible logs
+
+- **Recommended local debug run:** `.\gradlew.bat runDebugVisibleLogs` on Windows, or `./gradlew runDebugVisibleLogs` on Unix-like systems.
+- This path keeps the app attached to the launching console and enables the **dev** profile, so `AppLogger` emits verbose messages through **SLF4J + Logback**.
+- The `runDebugVisibleLogs` task is a dedicated `JavaExec` entry point that reuses the normal application JVM flags, forces `prompt.butler.profile=dev`, and strips UFT-injected environment hooks unless `-PkeepUftJvmHooks=true` is supplied.
+- Avoid the generated Windows `installDist` launcher for debugging log output because it intentionally switches to **`javaw.exe`**, which detaches from the console.
+- For an IDE launch configuration, run `com.viruchith.PromptButler.PromptButlerApp` with:
+  - `-Dprompt.butler.profile=dev`
+  - `--add-exports=javafx.graphics/com.sun.glass.ui=ALL-UNNAMED`
+  - `--add-opens=javafx.graphics/com.sun.glass.ui=ALL-UNNAMED`
+- Keep `src/main/resources/logback.xml` on the runtime classpath if you customize logger levels or formatting during debugging.
 
 ---
 

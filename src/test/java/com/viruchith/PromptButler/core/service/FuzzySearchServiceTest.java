@@ -92,6 +92,60 @@ class FuzzySearchServiceTest {
     }
 
     @Test
+    void unicodeNormalizationMatchesEquivalentForms() {
+        PromptTemplate t = t("Café", "accent");
+        List<PromptTemplate> ranked = svc.rank("Cafe\u0301", Arrays.asList(t, t("Other")));
+        assertEquals("Café", ranked.get(0).getTitle());
+    }
+
+    @Test
+    void matchesAcrossRequestedLanguages() {
+        List<PromptTemplate> templates = Arrays.asList(
+                t("English prompt"),
+                t("Français modèle"),
+                t("Deutsch vorlage"),
+                t("Español plantilla"),
+                t("Português prompt"),
+                t("Italiano modello"),
+                t("Nederlands sjabloon"),
+                t("Polski szablon"),
+                t("Türkçe istem"),
+                t("Tiếng Việt mẫu"),
+                t("Русский шаблон"),
+                t("Українська підказка"),
+                t("Български шаблон"),
+                t("Ελληνικά πρότυπο"),
+                t("हिन्दी प्रॉम्प्ट"),
+                t("தமிழ் வார்ப்புரு"),
+                t("తెలుగు ప్రాంప్ట్"),
+                t("ಕನ್ನಡ ಟೆಂಪ್ಲೇಟ್"),
+                t("മലയാളം മാതൃക"),
+                t("मराठी साचा"),
+                t("বাংলা টেমপ্লেট"),
+                t("ગુજરાતી નમૂનો"),
+                t("ਪੰਜਾਬੀ ਟੈਂਪਲੇਟ"),
+                t("العربية قالب"),
+                t("עברית תבנית"),
+                t("فارسی الگو"),
+                t("اردو سانچہ"),
+                t("简体中文 模板"),
+                t("繁體中文 範本"),
+                t("日本語 テンプレート"),
+                t("한국어 템플릿"),
+                t("ไทย เทมเพลต"),
+                t("Bahasa Indonesia templat"),
+                t("Bahasa Melayu templat"),
+                t("Kiswahili kiolezo"));
+        assertEquals("Français modèle", svc.rank("Français", templates).get(0).getTitle());
+        assertEquals("Русский шаблон", svc.rank("Русский", templates).get(0).getTitle());
+        assertEquals("தமிழ் வார்ப்புரு", svc.rank("தமிழ்", templates).get(0).getTitle());
+        assertEquals("العربية قالب", svc.rank("العربية", templates).get(0).getTitle());
+        assertEquals("日本語 テンプレート", svc.rank("日本語", templates).get(0).getTitle());
+        assertEquals("ไทย เทมเพลต", svc.rank("ไทย", templates).get(0).getTitle());
+        assertEquals("Kiswahili kiolezo", svc.rank("Kiswahili", templates).get(0).getTitle());
+    }
+
+    @Test
     void veryLongQueryDoesNotThrow() {
         StringBuilder longQuery = new StringBuilder();
         for (int i = 0; i < 500; i++) {
