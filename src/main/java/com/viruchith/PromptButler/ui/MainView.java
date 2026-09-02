@@ -1424,7 +1424,10 @@ public final class MainView extends VBox {
         webView.getEngine().setOnAlert(event -> { });
         webView.getEngine().setConfirmHandler(param -> false);
         webView.getEngine().setPromptHandler(param -> "");
-        webView.getEngine().loadContent(SafeMarkdownRenderer.renderDocument(markdown, preferences.isDarkMode()));
+        String html = SafeMarkdownRenderer.renderDocument(markdown, preferences.isDarkMode());
+        String dataUrl = "data:text/html;charset=UTF-8;base64," + 
+            java.util.Base64.getEncoder().encodeToString(html.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        webView.getEngine().load(dataUrl);
     }
 
     private static SplitPane buildPromptPreviewSplit(TextArea bodyArea, WebView previewArea) {
