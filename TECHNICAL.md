@@ -2,7 +2,7 @@
 
 This document is for **developers** maintaining or extending the codebase. End-user usage remains in [README.md](README.md).
 
-Current project version: **`0.4.2-SNAPSHOT`**.
+Current project version: **`0.4.3`**.
 
 ---
 
@@ -22,11 +22,24 @@ Current project version: **`0.4.2-SNAPSHOT`**.
 | UI | **JavaFX 21** (OpenJFX via `org.openjfx.javafxplugin`) |
 | Build | **Gradle 8.14.5** wrapper, `application` + `shadow` plugins |
 | JSON | **Gson** 2.10.1 |
+| Logging | **SLF4J 2.0** facade with **Logback 1.5** backend |
 | Global hotkey | **jNativeHook** 2.2.2 (`com.github.kwhat:jnativehook`) |
 | Icons (UI) | **Ikonli** Font Awesome 5 pack |
 | Tests | **JUnit 5**, **Mockito**; **JaCoCo** on `core` tree (see `build.gradle`) |
 
 **JavaFX modules** enabled in `build.gradle`: `javafx.controls`, `javafx.graphics` (sufficient for current UI; add `javafx.swing` only if you introduce Swing interop).
+
+```mermaid
+flowchart LR
+    Gradle[Gradle build] --> App[PromptButlerApp]
+    App --> UI[ui package]
+    App --> Core[core package]
+    App --> OS[os package]
+    Core --> Repo[repository/service/model/storage]
+    UI --> Clipboard[ui.clipboard]
+    OS --> Hook[jNativeHookHotkeyService]
+    Core --> Logging[AppLogger / SLF4J / Logback]
+```
 
 ---
 
@@ -36,7 +49,7 @@ Current project version: **`0.4.2-SNAPSHOT`**.
 |---------|------|
 | `com.viruchith.PromptButler` | **`PromptButlerApp`** — `Application` entry, stage/scene wiring, lifecycle (`start` / `stop`), hotkey and tray bootstrap; **`Launcher`** — classpath-safe entrypoint used by fat JAR packaging |
 | `...core.clipboard` | **`ClipboardPort`** abstraction; JavaFX adapter in `ui.clipboard` |
-| `...core.logging` | **`AppLogger`** — thin stderr logger, verbosity tied to `BuildProfile` |
+| `...core.logging` | **`AppLogger`** — compatibility facade over SLF4J/Logback; verbose info and stack traces still follow `BuildProfile` |
 | `...core.model` | Immutable **`PromptTemplate`**, **`UserPreferences`**, **`BuildProfile`**, **`AutoHideMode`** |
 | `...core.repository` | **`PromptRepository`** interface; **`JsonPromptRepository`** — Gson DTOs, file I/O, schema validation hook |
 | `...core.service` | **FuzzySearchService**, **VariableParser**, **TemplateCompiler**, **JsonSchemaValidator**, **ImportExportService**, **RecoveryService**, **PreferencesRepository**, **DataFileWatchService** |
@@ -54,7 +67,7 @@ Current project version: **`0.4.2-SNAPSHOT`**.
 ### 4.1 `start(Stage)`
 
 1. **`Platform.setImplicitExit(false)`** — closing/hiding the main stage does **not** terminate the JVM; quit is explicit (toolbar **Quit**, tray **Exit**, or `Platform.exit()` from error paths).
-2. **`BuildProfile.current()`** — reads `prompt.butler.profile` (`dev` vs default `prod`): toggles verbose logging and dev-only resources.
+2. **`BuildProfile.current()`** — reads `prompt.butler.profile` (`dev` vs default `prod`): toggles verbose logging behavior and dev-only resources.
 3. Delegates to **`startApplication`** inside try/catch; fatal errors show a JavaFX `Alert` then `Platform.exit()`.
 
 ### 4.2 Data directory and persistence
@@ -70,10 +83,22 @@ Current project version: **`0.4.2-SNAPSHOT`**.
 2. **`MainView`** — root content: title strip (icon + drag region), search, `ListView`, toolbar, status.
 3. **`StackPane` shell** — holds `MainView` (top-left) and a small **south-east `Region`** used as a **resize grip** (mouse drag updates `stage` width/height with minimum bounds).
 4. **`Scene`** — transparent fill (`OverlayStageFactory.applySceneBackgroundTransparent`) so rounded `app-panel` CSS shows correctly on the desktop.
-5. **Stylesheets** — `/styles/overlay.css`, `overlay-dev.css`, or `overlay-dark.css` from classpath (theme is preference-driven at runtime).
+5. **Stylesheets** — `/styles/overlay.css`, `overlay-dev.css`, or `overlay-dark.css` from classpath (theme is preference-driven at runtime). These now also style preview tabs and the split markdown/raw prompt view.
 6. **`stage.setOnCloseRequest`** — **consumes** the default close action and **hides** the stage (overlay pattern, not process exit).
 7. **`loadApplicationIcon`** — adds `/appicon.png` to `stage.getIcons()` for taskbar / OS integration.
 8. **Content-aware minimum size** — startup computes minimum stage dimensions from `MainView` preferred size so toolbar/action buttons are not compressed on small initial windows.
+
+```mermaid
+flowchart TD
+    Stage[JavaFX Stage] --> Shell[StackPane shell]
+    Shell --> MainView[MainView app panel]
+    Shell --> Grip[Resize grip]
+    MainView --> Title[Title strip]
+    MainView --> Search[Search + category filter]
+    MainView --> List[ListView]
+    MainView --> Toolbar[Toolbar]
+    MainView --> Status[Status label]
+```
 
 ### 4.4 Auxiliary services
 
@@ -112,7 +137,9 @@ Current project version: **`0.4.2-SNAPSHOT`**.
 | **Title strip drag** | `installUndecoratedStageDrag` — no native title bar under `TRANSPARENT`; updates `stage.setX/Y` from screen mouse delta |
 | **Title icon** | `ImageView` from `/appicon.png` |
 | **Single-click row** (delayed) | `PauseTransition` ~320 ms; cancelled on double-click; opens **detail** `Stage` (`WINDOW_MODAL`) |
+| **Detail preview** | Detail dialog now uses a `SplitPane` to keep **Prompt body** and **Rendered preview** visible together |
 | **Double-click / Enter on list** | `onTemplateChosen` — no `{{vars}}` → clipboard + hide overlay with short `PauseTransition` delay (avoids Glass issues); with vars → **`openVariableParametersWindow`** (modeless `Stage`, `Modality.NONE`) |
+| **Prompt editor preview** | New/Edit dialog uses a `TabPane` with **Write** and **Preview** tabs; preview is updated live from the body text area via `MarkdownPreviewRenderer` |
 | **Variable window** | `commitVariables` closes variable stage then **`copyPlainTextThenMaybeHide(..., false)`** so main overlay stays visible; focus handoff to this owned modeless stage no longer triggers auto-hide side effects because defocus handling is deferred and re-checked |
 | **Escape** | If variable window logic applies, close it; else **`hideOverlay()`** (hide stage, clear clipboard adapter retained buffers, close child stages) |
 | **Import / Export** | `ImportExportService` + file choosers; import remaps UUIDs, export supports selected rows, drag/drop import supported |
@@ -126,6 +153,30 @@ Current project version: **`0.4.2-SNAPSHOT`**.
 ### 5.4 `OverlayStageFactory`
 
 - Centralizes **transparent** stage style and **transparent scene fill** so all callers share the same overlay contract.
+
+### 5.5 Markdown preview + logging
+
+- **`MarkdownPreviewRenderer`** remains dependency-light and produces readable preview text for JavaFX controls rather than full HTML rendering.
+- It now normalizes common markdown constructs including headings, emphasis, lists, blockquotes, links, images, fenced code blocks, and paragraph spacing.
+- **`src/main/resources/logback.xml`** configures the current console logging backend.
+- `AppLogger` remains the migration seam: call sites stay unchanged while Logback now controls formatting/output.
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant MainView
+    participant Renderer as MarkdownPreviewRenderer
+    participant Logger as AppLogger/SLF4J
+    participant Logback
+
+    User->>MainView: Edit prompt body
+    MainView->>Renderer: render(body)
+    Renderer-->>MainView: preview text
+    User->>MainView: Save / open detail
+    MainView->>Logger: warn/info/error(...)
+    Logger->>Logback: delegate log event
+    Logback-->>Logger: formatted output
+```
 
 ---
 
@@ -144,12 +195,25 @@ Current project version: **`0.4.2-SNAPSHOT`**.
 |---------|---------|
 | `./gradlew run` / `.\gradlew.bat run` | Run app; forks JVM with `prompt.butler.profile` default **prod** |
 | `./gradlew run -Penv=dev` | Dev profile: verbose logs, dev CSS, dev seed when store empty |
+| `./gradlew runDebugVisibleLogs` | Dedicated JavaExec task for debug sessions with dev profile and visible console logging |
 | `./gradlew run -PkeepUftJvmHooks=true` | Rare: keep UFT-injected JVM hooks on app process (often breaks JavaFX) |
 | `./gradlew test` / `check` | Unit tests + JaCoCo gate on `com.viruchith.PromptButler.core` |
 | `./gradlew installDist` | Application distribution under `build/install/prompt-butler/` |
 | `./gradlew shadowJar` | Cross-platform fat JAR → `build/libs/prompt-butler-*-all.jar`; bundles JavaFX natives for win / linux / mac / mac-aarch64; run with `java --add-exports=... --add-opens=... -jar` |
 
 **`installDist` vs `./gradlew run`:** Gradle’s default **`installDist`** start scripts put everything on **`-classpath`**, which is **not** enough for OpenJFX 21: the JVM reports “JavaFX runtime components are missing”. **`build.gradle`** therefore patches **`startScripts`** so platform **`javafx-{base,graphics,controls}-*-(win|linux|mac|mac-aarch64).jar`** entries move to **`JAVAFX_MODULE_PATH`** and the **`java`** line gains **`--module-path "%JAVAFX_MODULE_PATH%"`** / **`--add-modules javafx.controls,javafx.graphics,javafx.base`** (Unix/Cygwin: same idea, plus **`cygpath`** for the module path). Other deps stay on **`-classpath`**. **`applicationDefaultJvmArgs`** Glass **`--add-exports` / `--add-opens`** are valid in that layout. The **`:run`** task still uses the JavaFX Gradle plugin’s module path; it only strips UFT-injected env vars on the app process. The generated scripts also **clear** **`JAVA_TOOL_OPTIONS`** / **`_JAVA_OPTIONS`** before launch when UFT injects agents that break Glass.
+
+### 7.1 Debugging with visible logs
+
+- **Recommended local debug run:** `.\gradlew.bat runDebugVisibleLogs` on Windows, or `./gradlew runDebugVisibleLogs` on Unix-like systems.
+- This path keeps the app attached to the launching console and enables the **dev** profile, so `AppLogger` emits verbose messages through **SLF4J + Logback**.
+- The `runDebugVisibleLogs` task is a dedicated `JavaExec` entry point that reuses the normal application JVM flags, forces `prompt.butler.profile=dev`, and strips UFT-injected environment hooks unless `-PkeepUftJvmHooks=true` is supplied.
+- Avoid the generated Windows `installDist` launcher for debugging log output because it intentionally switches to **`javaw.exe`**, which detaches from the console.
+- For an IDE launch configuration, run `com.viruchith.PromptButler.PromptButlerApp` with:
+  - `-Dprompt.butler.profile=dev`
+  - `--add-exports=javafx.graphics/com.sun.glass.ui=ALL-UNNAMED`
+  - `--add-opens=javafx.graphics/com.sun.glass.ui=ALL-UNNAMED`
+- Keep `src/main/resources/logback.xml` on the runtime classpath if you customize logger levels or formatting during debugging.
 
 ---
 

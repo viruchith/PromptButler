@@ -183,7 +183,29 @@
     -fx-background-color: #ffffff;
     -fx-text-fill: #111827;
     -fx-font-size: 12px;
+    -fx-font-family: "Consolas", "Cascadia Code", "Courier New", monospace;
     -fx-border-color: #d1d5db;
     -fx-border-radius: 4;
     -fx-background-radius: 4;
+}
+
+.split-pane {
+    -fx-background-color: transparent;
+}
+
+.split-pane-divider {
+    -fx-background-color: #d1d5db;
+    -fx-padding: 0 1 0 1;
+}
+
+.tab-pane .tab-header-area .tab-header-background {
+    -fx-background-color: transparent;
+}
+
+.tab-pane .tab {
+    -fx-background-color: #e5e7eb;
+}
+
+.tab-pane .tab:selected {
+    -fx-background-color: #ffffff;
 }

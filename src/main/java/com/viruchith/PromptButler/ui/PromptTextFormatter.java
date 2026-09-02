@@ -26,6 +26,15 @@ final class PromptTextFormatter {
         return sb.toString();
     }
 
+    static String formatPromptMetadataSummary(PromptTemplate t) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("Category: ").append(nullToEmpty(t.getCategory()));
+        sb.append("   Tags: ").append(tagsCsvForEditor(t.getTags()));
+        sb.append("   Usage count: ").append(t.getUsageCount());
+        sb.append("   Last used (epoch ms): ").append(t.getLastUsedEpochMillis());
+        return sb.toString();
+    }
+
     static String formatTagsSuffixForCell(List<String> tags) {
         if (tags == null || tags.isEmpty()) {
             return "";

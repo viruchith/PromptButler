@@ -14,7 +14,7 @@ For **developers** (architecture, packages, build internals, extension points), 
 
 ---
 
-**Version:** `0.4.0-SNAPSHOT` (see `build.gradle` → `version`).
+**Version:** `0.4.3` (see `build.gradle` → `version`).
 
 ## Table of contents
 
@@ -48,6 +48,19 @@ For **developers** (architecture, packages, build internals, extension points), 
 | **Configurable hotkey** | Override the global toggle shortcut in `preferences.json` (`hotkeyKeyCode`, `hotkeyModifiers`). |
 | **Data folder** | Toolbar **Data Folder** sets where `prompts.json` / `preferences.json` live (pointer under `~/PromptButler/`; restart to apply). |
 | **Live reload** | `prompts.json` / `preferences.json` updates are watched and reloaded at runtime. |
+| **Markdown preview** | Prompt details show raw body + rendered preview side by side, and the editor now includes a live preview tab. |
+
+```mermaid
+flowchart LR
+    A[Search prompts] --> B{Template has variables?}
+    B -- No --> C[Copy raw body]
+    C --> D[Hide overlay for fast paste]
+    B -- Yes --> E[Open variables window]
+    E --> F[Fill placeholders]
+    F --> G[Compile prompt]
+    G --> H[Copy compiled text]
+    H --> I[Keep main overlay available]
+```
 
 ---
 
@@ -70,7 +83,7 @@ For **developers** (architecture, packages, build internals, extension points), 
 | Goal | What to do |
 |------|------------|
 | Copy the **raw template body** (placeholders **not** filled) | Click the **Copy** icon on the row, **or** select the row and press **Ctrl+C** (list focused, not the search field). The overlay stays open; a short “Copied” status appears. |
-| Open read-only **details** (id, full text, actions) | **Single-click** the row (not on the row’s Copy icon). A small modal opens: **Copy**, **Edit**, **Delete**, **Close**. |
+| Open read-only **details** (id, body, rendered preview, actions) | **Single-click** the row (not on the row’s Copy icon). A modal opens with prompt metadata plus a split raw/preview view and actions like **Copy**, **Edit**, **Delete**, **Close**. |
 
 ### 4. Use a prompt with `{{variables}}` (separate window)
 
@@ -103,7 +116,7 @@ If the body has **no** `{{placeholders}}`:
 
 | Button | Use it to… |
 |--------|------------|
-| **New** | Create a template (title, body, tags, category). Category is selected from a dropdown and supports **New Category** popup creation. |
+| **New** | Create a template (title, body, tags, category). Category is selected from a dropdown and supports **New Category** popup creation, and the body editor includes a live markdown preview tab. |
 | **Shortcuts** | Show keyboard shortcut help (**F1**). |
 | **Import** | Replace the whole library from a JSON file (ids are reassigned on import). Drag-and-drop `.json` import is supported. |
 | **Export** | Export selected templates, or all templates if none are selected. |
@@ -113,6 +126,22 @@ If the body has **no** `{{placeholders}}`:
 | **Quit** | Exit the application. |
 
 **Note:** Opening Settings and in-app dialogs no longer triggers tray auto-hide while those windows are active.
+
+### 6.1 UI flow at a glance
+
+```mermaid
+flowchart TD
+    Hotkey[Global hotkey / tray / app window] --> Overlay[Overlay window]
+    Overlay --> Search[Search + category filter]
+    Overlay --> List[List of prompts]
+    List --> Detail[Single-click detail window]
+    List --> Choose[Double-click or Enter]
+    Detail --> RawPreview[Raw body + rendered preview]
+    Choose --> VariableCheck{Contains placeholders?}
+    VariableCheck -- Yes --> VariableWindow[Modeless variables window]
+    VariableCheck -- No --> Clipboard[Clipboard copy + hide]
+    VariableWindow --> ClipboardKeep[Clipboard copy, overlay stays open]
+```
 
 ### 7. Example: add your own snippet via JSON
 
@@ -151,9 +180,44 @@ Clone the repository, then from the project root:
 |---------|-------------|
 | `./gradlew run` | Default **prod**-style run (`prompt.butler.profile=prod`). |
 | `./gradlew run -Penv=dev` | Verbose logging, dev overlay border, seeds from `dev-prompts.json` when the store is empty. |
+| `./gradlew runDebugVisibleLogs` | Dedicated debug task that forces the dev profile and keeps app logs attached to the console. |
 | `./gradlew run -PkeepUftJvmHooks=true` | Rare: keep Micro Focus **UFT** JVM hooks on the **application** process (often breaks JavaFX; default is to strip `JAVA_TOOL_OPTIONS` / `_JAVA_OPTIONS` for the child JVM only). |
 
 You may still see “Picked up JAVA_TOOL_OPTIONS” from the **Gradle** JVM; that is usually harmless. The app process is forked **without** those variables unless you pass `-PkeepUftJvmHooks=true`.
+
+### Debug mode with visible logs
+
+For the simplest debug-friendly run, start the app from Gradle with the **dev** profile:
+
+```bash
+# Windows
+.\gradlew.bat run -Penv=dev
+
+# macOS / Linux
+./gradlew run -Penv=dev
+```
+
+Or use the dedicated Gradle task:
+
+```bash
+# Windows
+.\gradlew.bat runDebugVisibleLogs
+
+# macOS / Linux
+./gradlew runDebugVisibleLogs
+```
+
+This keeps the application attached to the terminal, so **Logback** output remains visible while the UI is running. On Windows, prefer this over the generated `installDist` launcher when debugging, because the installed `.bat` script uses **`javaw`** and does not keep a console attached.
+
+For IDE debugging, run `com.viruchith.PromptButler.PromptButlerApp` with these VM options:
+
+```text
+-Dprompt.butler.profile=dev
+--add-exports=javafx.graphics/com.sun.glass.ui=ALL-UNNAMED
+--add-opens=javafx.graphics/com.sun.glass.ui=ALL-UNNAMED
+```
+
+That gives you breakpoints, the dev profile, and visible console logs in the IDE run/debug console.
 
 ---
 
@@ -213,7 +277,7 @@ Uses the [Shadow plugin](https://gradleup.com/shadow/) to produce one self-conta
 .\gradlew.bat shadowJar
 ```
 
-Output: `build/libs/prompt-butler-0.4.0-SNAPSHOT-all.jar`
+Output: `build/libs/prompt-butler-0.4.3-all.jar`
 
 **Run on the target machine:**
 
@@ -221,10 +285,10 @@ Output: `build/libs/prompt-butler-0.4.0-SNAPSHOT-all.jar`
 # macOS / Linux
 java --add-exports=javafx.graphics/com.sun.glass.ui=ALL-UNNAMED \
      --add-opens=javafx.graphics/com.sun.glass.ui=ALL-UNNAMED \
-     -jar build/libs/prompt-butler-0.4.0-SNAPSHOT-all.jar
+     -jar build/libs/prompt-butler-0.4.3-all.jar
 
 # Windows (single line)
-java --add-exports=javafx.graphics/com.sun.glass.ui=ALL-UNNAMED --add-opens=javafx.graphics/com.sun.glass.ui=ALL-UNNAMED -jar build\libs\prompt-butler-0.4.0-SNAPSHOT-all.jar
+java --add-exports=javafx.graphics/com.sun.glass.ui=ALL-UNNAMED --add-opens=javafx.graphics/com.sun.glass.ui=ALL-UNNAMED -jar build\libs\prompt-butler-0.4.3-all.jar
 ```
 
 > **Why the JVM flags?** `PromptButlerApp` accesses `com.sun.glass.ui` internals for the global hotkey and tray integration. These are the same flags already declared in `applicationDefaultJvmArgs` in `build.gradle` for the `run` and `installDist` paths.
@@ -256,6 +320,22 @@ The Gradle **`maven-publish`** plugin is **not** configured here. To publish the
 
 **UI summary:** Row **Copy**; single-click opens a **detail** window (copy / favorite / edit / duplicate / delete). **New** creates prompts (UUID ids, category dropdown + category popup). **Import** replaces the library; drag/drop `.json` works. **Double-click** or **Enter** on the list runs the choose flow (variables or copy-and-hide). **Ctrl/Cmd+C** copies selected body when list is focused.
 The main Category filter now applies immediately and remains selected until changed.
+Prompt details now show the raw prompt body and rendered markdown preview together, and the editor preview tab reflects body changes live.
+
+**Logging:** application logging is now backed by **SLF4J + Logback** via `src/main/resources/logback.xml`, while existing code continues to use the `AppLogger` facade.
+
+```mermaid
+flowchart LR
+    prompts[prompts.json] --> repo[JsonPromptRepository]
+    prefs[preferences.json] --> prefRepo[PreferencesRepository]
+    repo --> vm[MainViewModel]
+    prefRepo --> ui[MainView]
+    vm --> ui
+    ui --> clipboard[System clipboard]
+    watcher[DataFileWatchService] --> repo
+    watcher --> prefRepo
+    logging[AppLogger -> SLF4J -> Logback] --> stderr[Console / stderr]
+```
 
 ---
 

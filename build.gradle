@@ -15,7 +15,7 @@ plugins {
 }
 
 group = 'com.viruchith.promptbutler'
-version = '0.4.2-SNAPSHOT'
+version = '0.4.3'
 
 def envProfile = (project.findProperty('env') ?: 'prod').toString().toLowerCase()
 
@@ -34,6 +34,8 @@ dependencies {
     implementation 'com.github.kwhat:jnativehook:2.2.2'
     implementation 'org.kordamp.ikonli:ikonli-javafx:12.3.1'
     implementation 'org.kordamp.ikonli:ikonli-fontawesome5-pack:12.3.1'
+    implementation 'org.slf4j:slf4j-api:2.0.17'
+    runtimeOnly 'ch.qos.logback:logback-classic:1.5.18'
 
     testImplementation platform('org.junit:junit-bom:5.10.2')
     testImplementation 'org.junit.jupiter:junit-jupiter'
@@ -81,6 +83,45 @@ tasks.named('run', JavaExec) { JavaExec exec ->
     systemProperty 'prompt.butler.profile', envProfile
     // Micro Focus UFT injects via JAVA_TOOL_OPTIONS / _JAVA_OPTIONS; fork the app without those
     // so JavaFX is not instrumented (avoids Glass IllegalAccessError and "Can't create support object for Scene").
+    def keepUftJvmHooks = (project.findProperty('keepUftJvmHooks')?.toString() == 'true')
+    exec.doFirst {
+        if (!keepUftJvmHooks) {
+            def env = new LinkedHashMap<String, String>(System.getenv())
+            env.remove('JAVA_TOOL_OPTIONS')
+            env.remove('_JAVA_OPTIONS')
+            exec.setEnvironment(env)
+        }
+    }
+}
+
+
+tasks.register('runDevDebugVisibleLogs', JavaExec) { JavaExec exec ->
+    group = 'application'
+    description = 'Internal JavaFX-aware dev run task used by runDebugVisibleLogs.'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = application.mainClass
+    systemProperty 'prompt.butler.profile', 'dev'
+    modularity.inferModulePath = true
+    jvmArgs(
+            '-Dfile.encoding=UTF-8',
+            '--add-modules', 'javafx.controls,javafx.graphics',
+            '--add-exports=javafx.graphics/com.sun.glass.ui=ALL-UNNAMED',
+            '--add-opens=javafx.graphics/com.sun.glass.ui=ALL-UNNAMED'
+    )
+    doFirst {
+        def runtimeArtifacts = configurations.runtimeClasspath.resolvedConfiguration.resolvedArtifacts
+        List<String> javafxModulePath = runtimeArtifacts.findAll { artifact ->
+            artifact.moduleVersion.id.group == 'org.openjfx' && artifact.classifier
+        }.collect { artifact ->
+            artifact.file.absolutePath
+        }.unique()
+        if (javafxModulePath.isEmpty()) {
+            throw new GradleException('No JavaFX runtime artifacts were found for runDevDebugVisibleLogs.')
+        }
+        exec.jvmArgs '--module-path', javafxModulePath.join(File.pathSeparator)
+    }
+    // Micro Focus UFT injects via JAVA_TOOL_OPTIONS / _JAVA_OPTIONS; fork the app without those
+    // so JavaFX is not instrumented (avoids Glass IllegalAccessError and "Can\'t create support object for Scene").
     def keepUftJvmHooks = (project.findProperty('keepUftJvmHooks')?.toString() == 'true')
     exec.doFirst {
         if (!keepUftJvmHooks) {
@@ -242,7 +283,7 @@ check.dependsOn jacocoTestCoverageVerification
 // Run with:
 //   java --add-exports=javafx.graphics/com.sun.glass.ui=ALL-UNNAMED \
 //        --add-opens=javafx.graphics/com.sun.glass.ui=ALL-UNNAMED \
-//        -jar build/libs/prompt-butler-0.4.0-SNAPSHOT-all.jar
+//        -jar build/libs/prompt-butler-0.4.3-all.jar
 shadowJar {
     archiveClassifier = 'all'
     mergeServiceFiles()

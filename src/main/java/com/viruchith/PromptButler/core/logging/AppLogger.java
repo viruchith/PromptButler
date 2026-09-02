@@ -1,18 +1,19 @@
 package com.viruchith.PromptButler.core.logging;
 
 import com.viruchith.PromptButler.core.model.BuildProfile;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-import java.io.PrintStream;
 import java.util.Objects;
 
 /**
- * Minimal logging facade (stderr). Verbose in {@link BuildProfile#DEV} only.
+ * Minimal logging facade. Verbose info and stack traces stay gated in {@link BuildProfile#DEV} only.
  */
 public final class AppLogger {
 
     private static final AppLogger INSTANCE = new AppLogger();
+    private static final Logger LOG = LoggerFactory.getLogger("prompt-butler");
 
-    private final PrintStream err = System.err;
     private volatile boolean verbose = BuildProfile.current().isDev();
 
     private AppLogger() {
@@ -29,35 +30,49 @@ public final class AppLogger {
     public void info(String message) {
         Objects.requireNonNull(message, "message");
         if (verbose) {
-            err.println("[prompt-butler] INFO: " + message);
+            LOG.info(message);
         }
     }
 
     public void warn(String message) {
-        err.println("[prompt-butler] WARN: " + Objects.requireNonNull(message, "message"));
+        LOG.warn(Objects.requireNonNull(message, "message"));
     }
 
     public void warn(String message, Throwable t) {
-        err.println("[prompt-butler] WARN: " + Objects.requireNonNull(message, "message"));
-        if (t != null) {
-            err.println("  Caused by: " + t.getClass().getName() + ": " + t.getMessage());
-            if (verbose) {
-                for (StackTraceElement el : t.getStackTrace()) {
-                    err.println("    at " + el);
-                }
-            }
-        }
+        logThrowableAtWarn(Objects.requireNonNull(message, "message"), t);
     }
 
     public void error(String message, Throwable t) {
-        err.println("[prompt-butler] ERROR: " + Objects.requireNonNull(message, "message"));
+        String safeMessage = Objects.requireNonNull(message, "message");
         if (t != null) {
-            err.println("  Caused by: " + t.getClass().getName() + ": " + t.getMessage());
             if (verbose) {
-                for (StackTraceElement el : t.getStackTrace()) {
-                    err.println("    at " + el);
-                }
+                LOG.error(safeMessage, t);
+            } else {
+                LOG.error(safeMessage + " | Caused by: " + summarizeThrowable(t));
             }
+            return;
         }
+        LOG.error(safeMessage);
+    }
+
+    private void logThrowableAtWarn(String message, Throwable t) {
+        if (t == null) {
+            LOG.warn(message);
+            return;
+        }
+        if (verbose) {
+            LOG.warn(message, t);
+            return;
+        }
+        LOG.warn(message + " | Caused by: " + summarizeThrowable(t));
+    }
+
+    private static String summarizeThrowable(Throwable t) {
+        String text = t.getClass().getName();
+        String detail = t.getMessage();
+        if (detail == null || detail.isEmpty()) {
+            return text;
+        }
+        return text + ": " + detail;
     }
 }
