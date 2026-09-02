@@ -48,6 +48,7 @@ import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
+import javafx.scene.web.WebView;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
@@ -102,6 +103,7 @@ public final class MainView extends VBox {
     private final UserPreferences preferences;
     private final Consumer<UserPreferences> preferencesSaver;
     private final Consumer<Boolean> themeSwitcher;
+    private static final String UNICODE_INPUT_FONT_STACK = "\"Segoe UI Emoji\", \"Apple Color Emoji\", \"Noto Color Emoji\", \"Segoe UI\", \"Nirmala UI\", \"Yu Gothic UI\", \"Malgun Gothic\", sans-serif";
 
     private final TextField searchField = new TextField();
     private final ComboBox<String> categoryFilter = new ComboBox<String>();
@@ -143,6 +145,7 @@ public final class MainView extends VBox {
         this.preferencesSaver = Objects.requireNonNull(preferencesSaver, "preferencesSaver");
         this.themeSwitcher = Objects.requireNonNull(themeSwitcher, "themeSwitcher");
         configureSearch();
+        applyUnicodeFriendlyInputFonts();
         configureList();
         configureToolbar();
         Label appTitle = new Label("Prompt Butler");
@@ -199,6 +202,11 @@ public final class MainView extends VBox {
             // leave empty if resource missing or unreadable
         }
         return iv;
+    }
+
+    private void applyUnicodeFriendlyInputFonts() {
+        searchField.setStyle("-fx-font-family: " + UNICODE_INPUT_FONT_STACK + ";");
+        categoryFilter.setStyle("-fx-font-family: " + UNICODE_INPUT_FONT_STACK + ";");
     }
 
     /**
@@ -1171,7 +1179,7 @@ public final class MainView extends VBox {
         metadata.setWrapText(true);
 
         TextArea content = buildReadOnlyPreviewArea(PromptTextFormatter.nullToEmpty(t.getBody()), "Prompt body");
-        TextArea markdownPreview = buildReadOnlyPreviewArea(MarkdownPreviewRenderer.render(t.getBody()), "Markdown preview");
+        WebView markdownPreview = buildMarkdownPreview(PromptTextFormatter.nullToEmpty(t.getBody()));
         SplitPane previewSplit = buildPromptPreviewSplit(content, markdownPreview);
 
         Button copyB = new Button("Copy");
@@ -1253,9 +1261,11 @@ public final class MainView extends VBox {
         bodyArea.setPromptText("Prompt body…");
         bodyArea.setPrefRowCount(8);
         bodyArea.setWrapText(true);
-        TextArea bodyPreview = buildReadOnlyPreviewArea("", "Rendered markdown preview");
-        bodyPreview.setPrefRowCount(8);
+        WebView bodyPreview = buildMarkdownPreview("");
         TextField tagsField = new TextField();
+        applyUnicodeFriendlyFont(titleField);
+        applyUnicodeFriendlyFont(bodyArea);
+        applyUnicodeFriendlyFont(tagsField);
         tagsField.setPromptText("comma, separated, tags");
         ComboBox<String> categoryDropdown = new ComboBox<String>();
         categoryDropdown.setPromptText("Category");
@@ -1291,7 +1301,7 @@ public final class MainView extends VBox {
         if (isEdit) {
             titleField.setText(PromptTextFormatter.nullToEmpty(existing.getTitle()));
             bodyArea.setText(PromptTextFormatter.nullToEmpty(existing.getBody()));
-            bodyPreview.setText(MarkdownPreviewRenderer.render(existing.getBody()));
+            loadMarkdownPreview(bodyPreview, existing.getBody());
             tagsField.setText(PromptTextFormatter.tagsCsvForEditor(existing.getTags()));
             String editCategory = InputText.trimToEmpty(existing.getCategory());
             if (editCategory.isEmpty()) {
@@ -1313,7 +1323,7 @@ public final class MainView extends VBox {
         grid.add(new Label("Category"), 0, r);
         grid.add(categoryRow, 1, r);
         bodyArea.textProperty().addListener((obs, oldValue, newValue) ->
-                bodyPreview.setText(MarkdownPreviewRenderer.render(newValue)));
+                loadMarkdownPreview(bodyPreview, newValue));
         dialog.getDialogPane().setContent(grid);
         attachLightDialogStyles(dialog.getDialogPane());
 
@@ -1387,11 +1397,31 @@ public final class MainView extends VBox {
         area.setWrapText(true);
         area.setPromptText(promptText);
         area.getStyleClass().add("preview-text");
+        applyUnicodeFriendlyFont(area);
         VBox.setVgrow(area, Priority.ALWAYS);
         return area;
     }
 
-    private static SplitPane buildPromptPreviewSplit(TextArea bodyArea, TextArea previewArea) {
+    private static void applyUnicodeFriendlyFont(Node node) {
+        node.setStyle("-fx-font-family: " + UNICODE_INPUT_FONT_STACK + ";");
+    }
+
+    private WebView buildMarkdownPreview(String markdown) {
+        WebView webView = new WebView();
+        webView.getStyleClass().add("markdown-preview");
+        webView.setContextMenuEnabled(false);
+        webView.setMinHeight(240);
+        webView.setPrefHeight(280);
+        loadMarkdownPreview(webView, markdown);
+        VBox.setVgrow(webView, Priority.ALWAYS);
+        return webView;
+    }
+
+    private void loadMarkdownPreview(WebView webView, String markdown) {
+        webView.getEngine().loadContent(MarkdownPreviewRenderer.renderDocument(markdown, preferences.isDarkMode()));
+    }
+
+    private static SplitPane buildPromptPreviewSplit(TextArea bodyArea, WebView previewArea) {
         VBox bodyBox = new VBox(6, new Label("Prompt body"), bodyArea);
         VBox previewBox = new VBox(6, new Label("Rendered preview"), previewArea);
         VBox.setVgrow(bodyArea, Priority.ALWAYS);
@@ -1402,7 +1432,7 @@ public final class MainView extends VBox {
         return split;
     }
 
-    private static TabPane buildEditorBodyTabs(TextArea bodyArea, TextArea previewArea) {
+    private static TabPane buildEditorBodyTabs(TextArea bodyArea, WebView previewArea) {
         Tab writeTab = new Tab("Write", bodyArea);
         writeTab.setClosable(false);
         Tab previewTab = new Tab("Preview", previewArea);

@@ -48,7 +48,7 @@ For **developers** (architecture, packages, build internals, extension points), 
 | **Configurable hotkey** | Override the global toggle shortcut in `preferences.json` (`hotkeyKeyCode`, `hotkeyModifiers`). |
 | **Data folder** | Toolbar **Data Folder** sets where `prompts.json` / `preferences.json` live (pointer under `~/PromptButler/`; restart to apply). |
 | **Live reload** | `prompts.json` / `preferences.json` updates are watched and reloaded at runtime. |
-| **Markdown preview** | Prompt details show raw body + rendered preview side by side, and the editor now includes a live preview tab. |
+| **Markdown preview** | Prompt details show raw body + rendered preview side by side, and the editor now includes a live WebView preview with Unicode, platform emoji font fallback, tables, task lists, code fences, and Mermaid-ready rendering. |
 
 ```mermaid
 flowchart LR

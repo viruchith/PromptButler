@@ -35,6 +35,8 @@ dependencies {
     implementation 'org.kordamp.ikonli:ikonli-javafx:12.3.1'
     implementation 'org.kordamp.ikonli:ikonli-fontawesome5-pack:12.3.1'
     implementation 'org.slf4j:slf4j-api:2.0.17'
+    implementation 'com.vladsch.flexmark:flexmark-all:0.64.8'
+    implementation 'org.jsoup:jsoup:1.18.1'
     runtimeOnly 'ch.qos.logback:logback-classic:1.5.18'
 
     testImplementation platform('org.junit:junit-bom:5.10.2')
@@ -48,7 +50,7 @@ dependencies {
     // Explicitly declare all platform classifiers so shadowJar bundles natives
     // for every supported OS. JavaFX PlatformUtil selects the right one at runtime.
     ['win', 'linux', 'mac', 'mac-aarch64'].each { platform ->
-        ['javafx-base', 'javafx-controls', 'javafx-graphics'].each { module ->
+        ['javafx-base', 'javafx-controls', 'javafx-graphics', 'javafx-web'].each { module ->
             runtimeOnly "org.openjfx:${module}:21.0.6:${platform}"
         }
     }
@@ -56,7 +58,7 @@ dependencies {
 
 javafx {
     version = '21.0.6'
-    modules = ['javafx.controls', 'javafx.graphics']
+    modules = ['javafx.controls', 'javafx.graphics', 'javafx.web']
 }
 
 def javafxArtifactsVersion = javafx.version
@@ -104,7 +106,7 @@ tasks.register('runDevDebugVisibleLogs', JavaExec) { JavaExec exec ->
     modularity.inferModulePath = true
     jvmArgs(
             '-Dfile.encoding=UTF-8',
-            '--add-modules', 'javafx.controls,javafx.graphics',
+            '--add-modules', 'javafx.controls,javafx.graphics,javafx.web',
             '--add-exports=javafx.graphics/com.sun.glass.ui=ALL-UNNAMED',
             '--add-opens=javafx.graphics/com.sun.glass.ui=ALL-UNNAMED'
     )

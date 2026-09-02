@@ -22,12 +22,13 @@ Current project version: **`0.4.3`**.
 | UI | **JavaFX 21** (OpenJFX via `org.openjfx.javafxplugin`) |
 | Build | **Gradle 8.14.5** wrapper, `application` + `shadow` plugins |
 | JSON | **Gson** 2.10.1 |
+| Markdown | **Flexmark** 0.64.8 + **Jsoup** 1.18 |
 | Logging | **SLF4J 2.0** facade with **Logback 1.5** backend |
 | Global hotkey | **jNativeHook** 2.2.2 (`com.github.kwhat:jnativehook`) |
 | Icons (UI) | **Ikonli** Font Awesome 5 pack |
 | Tests | **JUnit 5**, **Mockito**; **JaCoCo** on `core` tree (see `build.gradle`) |
 
-**JavaFX modules** enabled in `build.gradle`: `javafx.controls`, `javafx.graphics` (sufficient for current UI; add `javafx.swing` only if you introduce Swing interop).
+**JavaFX modules** enabled in `build.gradle`: `javafx.controls`, `javafx.graphics`, `javafx.web`.
 
 ```mermaid
 flowchart LR
@@ -54,7 +55,7 @@ flowchart LR
 | `...core.repository` | **`PromptRepository`** interface; **`JsonPromptRepository`** — Gson DTOs, file I/O, schema validation hook |
 | `...core.service` | **FuzzySearchService**, **VariableParser**, **TemplateCompiler**, **JsonSchemaValidator**, **ImportExportService**, **RecoveryService**, **PreferencesRepository**, **DataFileWatchService** |
 | `...core.storage` | **`StoragePaths`** — data directory resolution; **`SafePathResolver`** — prevents path escape when resolving children |
-| `...core.util` | **`InputText`** — shared `trim` normalization for UI and model |
+| `...core.util` | **`InputText`** — shared trim + Unicode NFC normalization for UI and model |
 | `...os` | **`JNativeHookHotkeyService`** — low-level keyboard listener, maps to overlay toggle |
 | `...ui` | **`MainView`**, **`MainViewModel`**, **`OverlayStageFactory`**, **`TrayIntegration`**, **`AutoHideController`**, **`UiIcons`**, dialogs and list chrome |
 
@@ -137,9 +138,9 @@ flowchart TD
 | **Title strip drag** | `installUndecoratedStageDrag` — no native title bar under `TRANSPARENT`; updates `stage.setX/Y` from screen mouse delta |
 | **Title icon** | `ImageView` from `/appicon.png` |
 | **Single-click row** (delayed) | `PauseTransition` ~320 ms; cancelled on double-click; opens **detail** `Stage` (`WINDOW_MODAL`) |
-| **Detail preview** | Detail dialog now uses a `SplitPane` to keep **Prompt body** and **Rendered preview** visible together |
+| **Detail preview** | Detail dialog now uses a `SplitPane` to keep **Prompt body** and a WebView-based rendered preview visible together |
 | **Double-click / Enter on list** | `onTemplateChosen` — no `{{vars}}` → clipboard + hide overlay with short `PauseTransition` delay (avoids Glass issues); with vars → **`openVariableParametersWindow`** (modeless `Stage`, `Modality.NONE`) |
-| **Prompt editor preview** | New/Edit dialog uses a `TabPane` with **Write** and **Preview** tabs; preview is updated live from the body text area via `MarkdownPreviewRenderer` |
+| **Prompt editor preview** | New/Edit dialog uses a `TabPane` with **Write** and **Preview** tabs; preview is updated live in a JavaFX `WebView` via `MarkdownPreviewRenderer` |
 | **Variable window** | `commitVariables` closes variable stage then **`copyPlainTextThenMaybeHide(..., false)`** so main overlay stays visible; focus handoff to this owned modeless stage no longer triggers auto-hide side effects because defocus handling is deferred and re-checked |
 | **Escape** | If variable window logic applies, close it; else **`hideOverlay()`** (hide stage, clear clipboard adapter retained buffers, close child stages) |
 | **Import / Export** | `ImportExportService` + file choosers; import remaps UUIDs, export supports selected rows, drag/drop import supported |
@@ -156,8 +157,10 @@ flowchart TD
 
 ### 5.5 Markdown preview + logging
 
-- **`MarkdownPreviewRenderer`** remains dependency-light and produces readable preview text for JavaFX controls rather than full HTML rendering.
-- It now normalizes common markdown constructs including headings, emphasis, lists, blockquotes, links, images, fenced code blocks, and paragraph spacing.
+- **`MarkdownPreviewRenderer`** now centralizes Flexmark parsing, HTML sanitization, inline preview styling, and theme-aware HTML document generation for JavaFX `WebView`.
+- It supports GitHub-flavored markdown features including tables, task lists, strikethrough, footnotes, definition lists, autolinks, typographic quotes, fenced code blocks, and Mermaid-ready code fences.
+- The preview HTML now prefers platform color emoji fonts (`Segoe UI Emoji`, `Apple Color Emoji`, `Noto Color Emoji`) ahead of symbol fallbacks so native emoji stay colorized where the embedded WebKit engine supports them.
+- Input is normalized to Unicode NFC before parsing so composed/decomposed user input remains stable across editing, persistence, and preview.
 - **`src/main/resources/logback.xml`** configures the current console logging backend.
 - `AppLogger` remains the migration seam: call sites stay unchanged while Logback now controls formatting/output.
 
@@ -171,7 +174,7 @@ sequenceDiagram
 
     User->>MainView: Edit prompt body
     MainView->>Renderer: render(body)
-    Renderer-->>MainView: preview text
+    Renderer-->>MainView: sanitized HTML document
     User->>MainView: Save / open detail
     MainView->>Logger: warn/info/error(...)
     Logger->>Logback: delegate log event

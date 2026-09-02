@@ -103,4 +103,17 @@ class PromptTemplateTest {
         assertEquals(a, b);
         assertEquals(a.hashCode(), b.hashCode());
     }
+
+    @Test
+    void normalizesAndPreservesRequestedLanguages() {
+        PromptTemplate p = new PromptTemplate(
+                " id ",
+                " Français Русский हिन्दी தமிழ் العربية فارسی 日本語 한국어 ไทย Kiswahili ",
+                "Cafe\u0301 Ελληνικά ગુજરાતી اردو 繁體中文 👨🏽‍💻",
+                Arrays.asList(" Tiếng Việt ", " עברית ", " Bahasa Melayu "));
+        assertEquals("id", p.getId());
+        assertEquals("Français Русский हिन्दी தமிழ் العربية فارسی 日本語 한국어 ไทย Kiswahili", p.getTitle());
+        assertEquals("Café Ελληνικά ગુજરાતી اردو 繁體中文 👨🏽‍💻", p.getBody());
+        assertEquals(Arrays.asList("Tiếng Việt", "עברית", "Bahasa Melayu"), p.getTags());
+    }
 }

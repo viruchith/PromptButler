@@ -1,7 +1,9 @@
 package com.viruchith.PromptButler.core.service;
 
 import com.viruchith.PromptButler.core.model.PromptTemplate;
+import com.viruchith.PromptButler.core.util.InputText;
 
+import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -18,7 +20,7 @@ public final class FuzzySearchService {
         if (query == null) {
             query = "";
         }
-        String q = query.trim().toLowerCase(Locale.ROOT);
+        String q = normalize(query);
         if (q.isEmpty()) {
             ArrayList<PromptTemplate> copy = new ArrayList<PromptTemplate>(templates);
             Collections.sort(copy, (a, b) -> {
@@ -33,7 +35,7 @@ public final class FuzzySearchService {
         ArrayList<Scored> scored = new ArrayList<Scored>();
         int cutoff = relevanceCutoff(q.length());
         for (PromptTemplate t : templates) {
-            String title = t.getTitle().toLowerCase(Locale.ROOT);
+            String title = normalize(t.getTitle());
             int tier = matchTier(q, title, t);
             int best = bestDistance(q, title, t.getTags(), cutoff + 1);
             if (tier == 5 && best > cutoff) {
@@ -108,7 +110,11 @@ public final class FuzzySearchService {
     }
 
     private static String normalize(String raw) {
-        return raw == null ? "" : raw.toLowerCase(Locale.ROOT);
+        if (raw == null) {
+            return "";
+        }
+        String normalized = InputText.normalizeUnicode(raw).toLowerCase(Locale.ROOT);
+        return Normalizer.normalize(normalized, Normalizer.Form.NFKC);
     }
 
     /**

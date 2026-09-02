@@ -190,4 +190,24 @@ class TemplateCompilerTest {
         m.put("msg", "hello \"world\"");
         assertEquals("echo \"hello \\\"world\\\"\"", compiler.compile(body, m, true));
     }
+
+    @Test
+    void compilesRequestedLanguagesWithoutLoss() {
+        String body = "{{english}}\n{{french}}\n{{russian}}\n{{hindi}}\n{{tamil}}\n{{arabic}}\n{{farsi}}\n{{chinese_simplified}}\n{{chinese_traditional}}\n{{japanese}}\n{{korean}}\n{{thai}}\n{{swahili}}";
+        Map<String, String> m = new HashMap<String, String>();
+        m.put("english", "English");
+        m.put("french", "Français");
+        m.put("russian", "Русский");
+        m.put("hindi", "हिन्दी");
+        m.put("tamil", "தமிழ்");
+        m.put("arabic", "العربية");
+        m.put("farsi", "فارسی");
+        m.put("chinese_simplified", "简体中文");
+        m.put("chinese_traditional", "繁體中文");
+        m.put("japanese", "日本語");
+        m.put("korean", "한국어");
+        m.put("thai", "ไทย");
+        m.put("swahili", "Kiswahili");
+        assertEquals("English\nFrançais\nРусский\nहिन्दी\nதமிழ்\nالعربية\nفارسی\n简体中文\n繁體中文\n日本語\n한국어\nไทย\nKiswahili", compiler.compile(body, m));
+    }
 }

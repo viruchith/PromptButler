@@ -63,4 +63,25 @@ class ImportExportServiceTest {
         assertEquals("new-2", remapped.get(1).getId());
         assertTrue(remapped.stream().noneMatch(p -> p.getId().startsWith("old-")));
     }
+
+    @Test
+    void importExportRoundTripPreservesUnicode() throws Exception {
+        String json = "{\"version\":1,\"templates\":[{\"id\":\"1\",\"title\":\"தமிழ் ✅\",\"body\":\"中文 العربية 👩🏾‍💻\",\"tags\":[\"हिन्दी\",\"עברית\"]}]}";
+        List<PromptTemplate> imported = service.importFromStream(new ByteArrayInputStream(json.getBytes(StandardCharsets.UTF_8)));
+        assertEquals("தமிழ் ✅", imported.get(0).getTitle());
+        assertEquals("中文 العربية 👩🏾‍💻", imported.get(0).getBody());
+        assertEquals(Arrays.asList("हिन्दी", "עברית"), imported.get(0).getTags());
+    }
+
+    @Test
+    void importSupportsRequestedLanguageSet() throws Exception {
+        String multilingual = "English Français Deutsch Español Português Italiano Nederlands Polski Türkçe Tiếng Việt "
+                + "Русский Українська Български Ελληνικά हिन्दी தமிழ் తెలుగు ಕನ್ನಡ മലയാളം मराठी বাংলা ગુજરાતી ਪੰਜਾਬੀ "
+                + "العربية עברית فارسی اردو 简体中文 繁體中文 日本語 한국어 ไทย Bahasa Indonesia Bahasa Melayu Kiswahili";
+        String json = "{\"version\":1,\"templates\":[{\"id\":\"1\",\"title\":\"" + multilingual + "\",\"body\":\"" + multilingual + "\",\"tags\":[\"العربية\",\"日本語\",\"Kiswahili\"]}]}";
+        List<PromptTemplate> imported = service.importFromStream(new ByteArrayInputStream(json.getBytes(StandardCharsets.UTF_8)));
+        assertEquals(multilingual, imported.get(0).getTitle());
+        assertEquals(multilingual, imported.get(0).getBody());
+        assertEquals(Arrays.asList("العربية", "日本語", "Kiswahili"), imported.get(0).getTags());
+    }
 }
