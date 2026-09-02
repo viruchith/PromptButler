@@ -100,6 +100,7 @@ final class SafeMarkdownRenderer {
 
     private static RenderResult render(String markdown) {
         String normalized = normalizeMarkdown(markdown);
+        normalized = normalized.replaceAll("\\{\\{[^}]*\\}\\}", "{}");
         String warnings = unicodeWarnings(normalized);
         if (normalized.length() > MAX_MARKDOWN_CHARS) {
             return new RenderResult(limitExceededMarkup("Prompt is too large to preview safely.") + warnings, detectDirection(normalized));
@@ -134,7 +135,8 @@ final class SafeMarkdownRenderer {
         html = EVENT_HANDLER.matcher(html).replaceAll("");
         html = DANGEROUS_URI.matcher(html).replaceAll("$1=\"#blocked\"");
         html = hardenAnchors(html);
-        html = html.replaceAll("(?i)<img\\b[^>]*>", "<div class=\"pb-image-blocked\">Image blocked in preview for security.</div>");
+        html = html.replaceAll("(?i)<(h[1-6])\\s+id=\"[^\"]*\"(\\s*>)", "<$1$2");
+        html = html.replaceAll("(?i)<img\\b[^>]*>", "");
         html = html.replaceAll("(?i)<input\\b(?![^>]*type\\s*=\\s*\"checkbox\")[^>]*>", "<span></span>");
         html = html.replaceAll("(?i)<input\\b([^>]*?)type\\s*=\\s*\"checkbox\"([^>]*)>", "<input type=\"checkbox\" disabled=\"disabled\"$1$2>");
         html = limitLargeCodeBlocks(html);
@@ -243,22 +245,35 @@ final class SafeMarkdownRenderer {
         }
         StringBuilder out = new StringBuilder(html.length() + 64);
         boolean insideTag = false;
-        for (int i = 0; i < html.length(); ) {
+        int i = 0;
+        while (i < html.length()) {
             int codePoint = html.codePointAt(i);
             if (codePoint == '<') {
                 insideTag = true;
                 out.append('<');
+                i += Character.charCount(codePoint);
             } else if (codePoint == '>') {
                 insideTag = false;
                 out.append('>');
+                i += Character.charCount(codePoint);
             } else if (!insideTag && shouldPreserveAsEntity(codePoint)) {
-                out.append("<span class=\"pb-emoji\">&#x")
-                        .append(Integer.toHexString(codePoint).toUpperCase(Locale.ROOT))
-                        .append(";</span>");
+                // Collect consecutive emoji/modifier code points
+                StringBuilder emojiSeq = new StringBuilder();
+                int startIdx = i;
+                while (i < html.length()) {
+                    int cp = html.codePointAt(i);
+                    if (shouldPreserveAsEntity(cp)) {
+                        emojiSeq.appendCodePoint(cp);
+                        i += Character.charCount(cp);
+                    } else {
+                        break;
+                    }
+                }
+                out.append("<span class=\"pb-emoji\">").append(emojiSeq).append("</span>");
             } else {
                 out.appendCodePoint(codePoint);
+                i += Character.charCount(codePoint);
             }
-            i += Character.charCount(codePoint);
         }
         return out.toString();
     }
