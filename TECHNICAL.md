@@ -22,7 +22,7 @@ Current project version: **`0.4.3`**.
 | UI | **JavaFX 21** (OpenJFX via `org.openjfx.javafxplugin`) |
 | Build | **Gradle 8.14.5** wrapper, `application` + `shadow` plugins |
 | JSON | **Gson** 2.10.1 |
-| Markdown | **Flexmark** 0.64.8 + **Jsoup** 1.18 |
+| Markdown | **Flexmark** 0.64.8 + hardened in-process sanitization + JavaFX **WebView** |
 | Logging | **SLF4J 2.0** facade with **Logback 1.5** backend |
 | Global hotkey | **jNativeHook** 2.2.2 (`com.github.kwhat:jnativehook`) |
 | Icons (UI) | **Ikonli** Font Awesome 5 pack |
@@ -140,7 +140,7 @@ flowchart TD
 | **Single-click row** (delayed) | `PauseTransition` ~320 ms; cancelled on double-click; opens **detail** `Stage` (`WINDOW_MODAL`) |
 | **Detail preview** | Detail dialog now uses a `SplitPane` to keep **Prompt body** and a WebView-based rendered preview visible together |
 | **Double-click / Enter on list** | `onTemplateChosen` — no `{{vars}}` → clipboard + hide overlay with short `PauseTransition` delay (avoids Glass issues); with vars → **`openVariableParametersWindow`** (modeless `Stage`, `Modality.NONE`) |
-| **Prompt editor preview** | New/Edit dialog uses a `TabPane` with **Write** and **Preview** tabs; preview is updated live in a JavaFX `WebView` via `MarkdownPreviewRenderer` |
+| **Prompt editor preview** | New/Edit dialog uses a `TabPane` with **Write** and **Preview** tabs; preview is updated live in a JavaFX `WebView` via `SafeMarkdownRenderer` |
 | **Variable window** | `commitVariables` closes variable stage then **`copyPlainTextThenMaybeHide(..., false)`** so main overlay stays visible; focus handoff to this owned modeless stage no longer triggers auto-hide side effects because defocus handling is deferred and re-checked |
 | **Escape** | If variable window logic applies, close it; else **`hideOverlay()`** (hide stage, clear clipboard adapter retained buffers, close child stages) |
 | **Import / Export** | `ImportExportService` + file choosers; import remaps UUIDs, export supports selected rows, drag/drop import supported |
@@ -157,9 +157,10 @@ flowchart TD
 
 ### 5.5 Markdown preview + logging
 
-- **`MarkdownPreviewRenderer`** now centralizes Flexmark parsing, HTML sanitization, inline preview styling, and theme-aware HTML document generation for JavaFX `WebView`.
-- It supports GitHub-flavored markdown features including tables, task lists, strikethrough, footnotes, definition lists, autolinks, typographic quotes, fenced code blocks, and Mermaid-ready code fences.
-- The preview HTML now prefers platform color emoji fonts (`Segoe UI Emoji`, `Apple Color Emoji`, `Noto Color Emoji`) ahead of symbol fallbacks so native emoji stay colorized where the embedded WebKit engine supports them.
+- **`SafeMarkdownRenderer`** centralizes Flexmark parsing, HTML generation, sanitization, URI policy enforcement, Mermaid/code block limiting, inline preview styling, and theme-aware HTML document generation for JavaFX `WebView`.
+- It supports GitHub-flavored markdown features including tables, task lists, strikethrough, footnotes, definition lists, autolinks, typographic quotes, fenced code blocks, Mermaid diagrams, and bundled highlight.js syntax highlighting.
+- Emoji rendering in preview follows the last known working strategy from the earlier WebView markdown renderer: after markdown HTML generation, emoji code points are preserved as HTML entities and then rendered by the platform emoji font stack inside JavaFX `WebView`.
+- The preview HTML prefers platform color emoji fonts (`Segoe UI Emoji`, `Apple Color Emoji`, `Noto Color Emoji`) ahead of symbol fallbacks so native emoji stay colorized where the embedded WebKit engine supports them.
 - Input is normalized to Unicode NFC before parsing so composed/decomposed user input remains stable across editing, persistence, and preview.
 - **`src/main/resources/logback.xml`** configures the current console logging backend.
 - `AppLogger` remains the migration seam: call sites stay unchanged while Logback now controls formatting/output.
@@ -168,18 +169,51 @@ flowchart TD
 sequenceDiagram
     participant User
     participant MainView
-    participant Renderer as MarkdownPreviewRenderer
+    participant Renderer as SafeMarkdownRenderer
     participant Logger as AppLogger/SLF4J
     participant Logback
 
     User->>MainView: Edit prompt body
     MainView->>Renderer: render(body)
-    Renderer-->>MainView: sanitized HTML document
+    Renderer-->>MainView: sanitized + policy-hardened HTML document
     User->>MainView: Save / open detail
     MainView->>Logger: warn/info/error(...)
     Logger->>Logback: delegate log event
     Logback-->>Logger: formatted output
 ```
+
+### 5.6 Markdown security model
+
+```mermaid
+flowchart LR
+    Input[User / imported markdown] --> Normalize[InputText NFC normalization]
+    Normalize --> Parse[Flexmark parser]
+    Parse --> Html[Escaped HTML rendering]
+    Html --> Emoji[Emoji entity preservation]
+    Emoji --> Sanitize[SafeMarkdownRenderer policy enforcement]
+    Sanitize --> Policy[Link, image, Mermaid, size policies]
+    Policy --> WebView[Hardened WebView]
+```
+
+| Surface | Control |
+|---------|---------|
+| Raw HTML in markdown | Flexmark renders with `escapeHtml(true)`, so embedded HTML is shown as inert text rather than executed markup |
+| Script/event/style injection | Script/style/iframe/SVG blocks, inline event handlers, and dangerous URI-bearing attributes are stripped or neutralized before WebView render |
+| URI abuse | Only `http`, `https`, and optional `mailto` are preserved on anchors |
+| Image abuse | Preview blocks all images, including remote and `file:` URLs |
+| Mermaid abuse | Only fenced `language-mermaid` blocks are converted; oversized diagrams are replaced with a warning |
+| Unicode abuse | Renderer warns on bidi override chars, invisible formatting chars, and suspicious mixed Latin/Cyrillic/Greek text |
+| DoS via huge content | Document, rendered HTML, DOM node, table, code block, and Mermaid size limits |
+| WebView abuse | Context menu disabled; popup, alert, confirm, and prompt handlers suppressed in `MainView` |
+
+**Library decision:** the project keeps the existing in-process dependency footprint and currently uses a dedicated `SafeMarkdownRenderer` hardening layer rather than introducing OWASP Java HTML Sanitizer or AntiSamy. That keeps preview behavior deterministic and centralizes rendering policy in one class while preserving the working emoji-rendering path in JavaFX WebView. If the preview later needs a broader HTML allow-list, OWASP Java HTML Sanitizer is the preferred upgrade path over AntiSamy.
+
+### 5.7 Security acceptance notes
+
+1. **Variables:** placeholder substitution still happens on plain text, and preview sanitization occurs only after the final markdown text is produced. This preserves the required ordering: resolve variables → parse markdown → sanitize HTML.
+2. **Clipboard/export:** compiled and raw prompt text are copied/exported without renderer mutation by design; the preview is a safety boundary for display, not a content-rewriting boundary.
+3. **Logging:** markdown and compiled prompt bodies should not be logged. Use metadata-only logging such as lengths, counts, file paths, and exception summaries.
+4. **Known rendering caveat:** the current preview path is optimized to preserve emoji rendering by delegating glyph shaping and color support to the host system's emoji fonts inside WebView. Inline images remain intentionally blocked, and any future broadening of HTML/media support must be evaluated against the existing threat model first.
 
 ---
 

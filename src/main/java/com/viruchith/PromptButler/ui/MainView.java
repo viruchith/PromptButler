@@ -1418,7 +1418,13 @@ public final class MainView extends VBox {
     }
 
     private void loadMarkdownPreview(WebView webView, String markdown) {
-        webView.getEngine().loadContent(MarkdownPreviewRenderer.renderDocument(markdown, preferences.isDarkMode()));
+        webView.getEngine().setJavaScriptEnabled(true);
+        webView.getEngine().setUserStyleSheetLocation(null);
+        webView.getEngine().setCreatePopupHandler(features -> null);
+        webView.getEngine().setOnAlert(event -> { });
+        webView.getEngine().setConfirmHandler(param -> false);
+        webView.getEngine().setPromptHandler(param -> "");
+        webView.getEngine().loadContent(SafeMarkdownRenderer.renderDocument(markdown, preferences.isDarkMode()));
     }
 
     private static SplitPane buildPromptPreviewSplit(TextArea bodyArea, WebView previewArea) {

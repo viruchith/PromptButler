@@ -51,4 +51,10 @@ class JsonSchemaValidatorTest {
         String json = "{\"version\":1,\"templates\":[{\"id\":\"1\",\"title\":\"t\",\"body\":\"b\",\"tags\":[],\"revisions\":[\"x\"]}]}";
         assertThrows(IllegalArgumentException.class, () -> validator.validatePromptStoreJson(json));
     }
+
+    @Test
+    void rejectsTagWithNullByte() {
+        String json = "{\"version\":1,\"templates\":[{\"id\":\"1\",\"title\":\"t\",\"body\":\"b\",\"tags\":[\"bad\\u0000tag\"]}]}";
+        assertThrows(IllegalArgumentException.class, () -> validator.validatePromptStoreJson(json));
+    }
 }

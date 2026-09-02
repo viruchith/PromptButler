@@ -48,7 +48,7 @@ For **developers** (architecture, packages, build internals, extension points), 
 | **Configurable hotkey** | Override the global toggle shortcut in `preferences.json` (`hotkeyKeyCode`, `hotkeyModifiers`). |
 | **Data folder** | Toolbar **Data Folder** sets where `prompts.json` / `preferences.json` live (pointer under `~/PromptButler/`; restart to apply). |
 | **Live reload** | `prompts.json` / `preferences.json` updates are watched and reloaded at runtime. |
-| **Markdown preview** | Prompt details show raw body + rendered preview side by side, and the editor now includes a live WebView preview with Unicode, platform emoji font fallback, tables, task lists, code fences, and Mermaid-ready rendering. |
+| **Markdown preview** | Prompt details show raw body + rendered preview side by side, and the editor now includes a live WebView preview with Unicode, system emoji rendering via platform font fallback, tables, task lists, code fences, Mermaid rendering, syntax highlighting, and a hardened sanitization pipeline for untrusted prompt content. |
 
 ```mermaid
 flowchart LR
@@ -218,6 +218,39 @@ For IDE debugging, run `com.viruchith.PromptButler.PromptButlerApp` with these V
 ```
 
 That gives you breakpoints, the dev profile, and visible console logs in the IDE run/debug console.
+
+## Markdown preview security
+
+Prompt content is treated as **untrusted input** throughout preview rendering. The current pipeline is:
+
+```mermaid
+flowchart LR
+    A[Markdown source] --> B[Unicode normalization]
+    B --> C[Flexmark parse]
+    C --> D[HTML generation with escaped raw HTML]
+    D --> E[SafeMarkdownRenderer sanitization and policy enforcement]
+    E --> F[WebView rendering]
+```
+
+- **Links:** only `http`, `https`, and `mailto` survive sanitization; preview clicks are suppressed inside the embedded WebView.
+- **Images:** blocked in preview to prevent local-file access, beaconing, and unsafe URI handling.
+- **Mermaid:** rendered from fenced `mermaid` blocks only, with strict Mermaid security mode and size limits.
+- **Unsafe HTML:** scripts, inline handlers, frames, styles, SVG payloads, and unsupported tags are neutralized so they render only as inert text or are flattened from the preview DOM.
+- **Large content:** preview size limits prevent oversized markdown, giant tables, and oversized Mermaid/code blocks from freezing the UI.
+- **Emoji handling:** preview rendering now preserves emoji code points as HTML entities after markdown generation and relies on the host platform's emoji font stack in JavaFX WebView for final rendering. The preview does not depend on markdown `:shortcode:` emoji expansion.
+- **Known limitation:** the current renderer work focused on restoring emoji behavior in preview. Inline images remain intentionally blocked, and some non-emoji symbol/code-point cases may still need follow-up investigation if they are transformed before the preview policy layer sees them.
+
+### Security posture summary
+
+| Area | Current control |
+|------|------------------|
+| XSS / HTML injection | Raw HTML is escaped before DOM sanitization and only a narrow HTML subset survives |
+| Link handling | Only `http`, `https`, and `mailto` are kept; preview links are non-clickable inside WebView |
+| Images | Disabled in preview |
+| Mermaid | Rendered only from fenced Mermaid blocks with `securityLevel: 'strict'` and size caps |
+| Unicode abuse | Preview warns on bidi override, invisible formatting, and suspicious mixed-script content |
+| Clipboard | Clipboard receives the user’s compiled/plain text intentionally; preview sanitization does not mutate exported prompt content |
+| Import/export | UTF-8 + schema validation + file size cap preserve compatibility while rejecting malformed payloads |
 
 ---
 
