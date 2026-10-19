@@ -2,6 +2,22 @@
 
 All notable changes to Prompt Butler are documented in this file.
 
+## 0.4.4
+
+### Fixed
+
+- Fixed an issue where the main overlay window continuously expanded / grew on launch and reopen across restarts on macOS and Windows.
+- Converted the main toolbar in `MainView` from a non-wrapping `HBox` to a `FlowPane` with wrapped rows, allowing the compact overlay layout to breathe without forcing an inflated width (~763px+) from toolbar button labels and icons.
+- Removed `applyContentBasedMinimumSize`, restoring the intended compact minimum dimensions (`320x360`) and default scene dimensions (`420x520`) so user-driven resize controls work as designed.
+- Fixed `applyCenteredDefaultBounds()` to guard against `Double.NaN` stage dimensions prior to `stage.show()`, ensuring reliable initial centering on primary screens.
+- Debounced window bounds persistence listeners with a 300 ms timer and added guards against minimized/iconified/invalid stages, eliminating disk-write bursts during window movements.
+- Prevented unneeded CSS stylesheet resets during preference updates by checking whether `darkMode` actually changed in `applyUpdatedPreferences()`.
+- Added automatic detection and recovery for previously bug-inflated window bounds (`~787x582`), cleanly restoring affected preference stores back to default bounds.
+
+### Tests
+
+- Added `WindowSizingTest` verifying unshown stage centering, stability across restarts, and detection and recovery from inflated window sizes.
+
 ## 0.4.3
 
 ### Added

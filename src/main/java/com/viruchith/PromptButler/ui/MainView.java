@@ -42,6 +42,7 @@ import javafx.scene.input.KeyEvent;
 import javafx.scene.input.MouseButton;
 import javafx.scene.input.MouseEvent;
 import javafx.util.Duration;
+import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
@@ -109,7 +110,7 @@ public final class MainView extends VBox {
     private final ComboBox<String> categoryFilter = new ComboBox<String>();
     private final ListView<PromptTemplate> listView = new ListView<PromptTemplate>();
     private final VBox listSection = new VBox(6);
-    private final HBox toolbar = new HBox(8);
+    private final FlowPane toolbar = new FlowPane(6, 6);
     private final Label statusLabel = new Label("");
     private final HBox titleBar = new HBox(8);
 
@@ -269,7 +270,7 @@ public final class MainView extends VBox {
         String implVer = MainView.class.getPackage() != null
                 ? MainView.class.getPackage().getImplementationVersion()
                 : null;
-        String versionLine = (implVer == null || implVer.isEmpty()) ? "0.4.3" : implVer;
+        String versionLine = (implVer == null || implVer.isEmpty()) ? "0.4.4" : implVer;
         Label version = new Label("Version " + versionLine);
         version.getStyleClass().add("preview-label");
 
@@ -536,6 +537,7 @@ public final class MainView extends VBox {
         Button quit = new Button("Quit");
         styleToolbarButton(quit, FontAwesomeSolid.SIGN_OUT_ALT, "Exit the application.");
         quit.setOnAction(e -> System.exit(0));
+        toolbar.setPrefWrapLength(380);
         toolbar.getChildren().addAll(newBtn, shortcutsBtn, importBtn, exportBtn, settingsBtn, dataBtn, undoDeleteButton, quit);
     }
 
@@ -842,6 +844,7 @@ public final class MainView extends VBox {
     }
 
     public void applyUpdatedPreferences(UserPreferences latestPreferences) {
+        boolean darkChanged = preferences.isDarkMode() != latestPreferences.isDarkMode();
         preferences.setAutoHideMode(latestPreferences.getAutoHideMode());
         preferences.setDefocusOpacity(latestPreferences.getDefocusOpacity());
         preferences.setDarkMode(latestPreferences.isDarkMode());
@@ -853,7 +856,9 @@ public final class MainView extends VBox {
         preferences.setWindowY(latestPreferences.getWindowY());
         preferences.setWindowWidth(latestPreferences.getWindowWidth());
         preferences.setWindowHeight(latestPreferences.getWindowHeight());
-        themeSwitcher.accept(Boolean.valueOf(preferences.isDarkMode()));
+        if (darkChanged) {
+            themeSwitcher.accept(Boolean.valueOf(preferences.isDarkMode()));
+        }
     }
 
     /**
