@@ -14,7 +14,7 @@ For **developers** (architecture, packages, build internals, extension points), 
 
 ---
 
-**Version:** `0.4.3` (see `build.gradle` → `version`).
+**Version:** `0.4.4` (see `build.gradle` → `version`).
 
 ## Table of contents
 
@@ -310,7 +310,7 @@ Uses the [Shadow plugin](https://gradleup.com/shadow/) to produce one self-conta
 .\gradlew.bat shadowJar
 ```
 
-Output: `build/libs/prompt-butler-0.4.3-all.jar`
+Output: `build/libs/prompt-butler-0.4.4-all.jar`
 
 **Run on the target machine:**
 
@@ -318,10 +318,10 @@ Output: `build/libs/prompt-butler-0.4.3-all.jar`
 # macOS / Linux
 java --add-exports=javafx.graphics/com.sun.glass.ui=ALL-UNNAMED \
      --add-opens=javafx.graphics/com.sun.glass.ui=ALL-UNNAMED \
-     -jar build/libs/prompt-butler-0.4.3-all.jar
+     -jar build/libs/prompt-butler-0.4.4-all.jar
 
 # Windows (single line)
-java --add-exports=javafx.graphics/com.sun.glass.ui=ALL-UNNAMED --add-opens=javafx.graphics/com.sun.glass.ui=ALL-UNNAMED -jar build\libs\prompt-butler-0.4.3-all.jar
+java --add-exports=javafx.graphics/com.sun.glass.ui=ALL-UNNAMED --add-opens=javafx.graphics/com.sun.glass.ui=ALL-UNNAMED -jar build\libs\prompt-butler-0.4.4-all.jar
 ```
 
 > **Why the JVM flags?** `PromptButlerApp` accesses `com.sun.glass.ui` internals for the global hotkey and tray integration. These are the same flags already declared in `applicationDefaultJvmArgs` in `build.gradle` for the `run` and `installDist` paths.

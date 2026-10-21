@@ -2,7 +2,7 @@
 
 This document is for **developers** maintaining or extending the codebase. End-user usage remains in [README.md](README.md).
 
-Current project version: **`0.4.3`**.
+Current project version: **`0.4.4`**.
 
 ---
 
@@ -87,7 +87,7 @@ flowchart LR
 5. **Stylesheets** — `/styles/overlay.css`, `overlay-dev.css`, or `overlay-dark.css` from classpath (theme is preference-driven at runtime). These now also style preview tabs and the split markdown/raw prompt view.
 6. **`stage.setOnCloseRequest`** — **consumes** the default close action and **hides** the stage (overlay pattern, not process exit).
 7. **`loadApplicationIcon`** — adds `/appicon.png` to `stage.getIcons()` for taskbar / OS integration.
-8. **Content-aware minimum size** — startup computes minimum stage dimensions from `MainView` preferred size so toolbar/action buttons are not compressed on small initial windows.
+8. **Window sizing and bounds stability** — the overlay maintains fixed minimum dimensions (320×360) and a default scene size (420×520). The toolbar uses a wrapping `FlowPane` (wrap length 380) so buttons flow naturally across rows without forcing wide minimum stages. Persisted window bounds are debounced (300 ms), validated against finite screen dimensions, and guarded against minimized states; stylesheet reloading in `applyUpdatedPreferences()` is restricted to actual dark-mode transitions to prevent feedback loops.
 
 ```mermaid
 flowchart TD

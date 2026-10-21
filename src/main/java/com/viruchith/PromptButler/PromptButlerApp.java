@@ -31,6 +31,7 @@ import com.viruchith.PromptButler.ui.MainViewModel;
 import com.viruchith.PromptButler.ui.OverlayStageFactory;
 import com.viruchith.PromptButler.ui.TrayIntegration;
 import com.viruchith.PromptButler.ui.clipboard.JavaFxClipboardAdapter;
+import javafx.animation.PauseTransition;
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.geometry.Pos;
@@ -41,6 +42,7 @@ import javafx.scene.image.Image;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.stage.Stage;
+import javafx.util.Duration;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -153,8 +155,8 @@ public final class PromptButlerApp extends Application {
         // TRANSPARENT style has no native title bar; taskbar / OS may still use this string.
         stage.setTitle("Prompt Butler");
         loadApplicationIcon(stage);
-        stage.setMinWidth(320);
-        stage.setMinHeight(360);
+        stage.setMinWidth(MIN_WINDOW_WIDTH);
+        stage.setMinHeight(MIN_WINDOW_HEIGHT);
         stage.setResizable(true);
         Consumer<UserPreferences> preferencesSaver = updated -> persistPreferencesQuietly(preferencesRepository, prefsFile, updated);
         Consumer<Boolean> themeSwitcher = dark -> {
@@ -171,13 +173,25 @@ public final class PromptButlerApp extends Application {
         mainView.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
         Region resizeGrip = createSouthEastResizeGrip(stage);
         shell.getChildren().addAll(mainView, resizeGrip);
-        Scene scene = new Scene(shell, 420, 520);
+        Scene scene = new Scene(shell, DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT);
         OverlayStageFactory.applySceneBackgroundTransparent(scene);
         applyTheme(scene, profile, preferences.isDarkMode());
         stage.setScene(scene);
-        applyContentBasedMinimumSize(stage, mainView, shell);
         stage.setOnCloseRequest(e -> {
             e.consume();
+            if (stage.isShowing() && !stage.isIconified() && !stage.isMaximized()) {
+                double curW = stage.getWidth();
+                double curH = stage.getHeight();
+                double curX = stage.getX();
+                double curY = stage.getY();
+                if (areFiniteAndPositiveBounds(curX, curY, curW, curH)) {
+                    preferences.setWindowX(curX);
+                    preferences.setWindowY(curY);
+                    preferences.setWindowWidth(curW);
+                    preferences.setWindowHeight(curH);
+                    persistPreferencesQuietly(preferencesRepository, prefsFile, preferences);
+                }
+            }
             stage.hide();
         });
 
@@ -213,12 +227,15 @@ public final class PromptButlerApp extends Application {
         }
 
         if (preferences.hasWindowBounds()) {
-            double persistedW = Math.max(stage.getMinWidth(), preferences.getWindowWidth());
-            double persistedH = Math.max(stage.getMinHeight(), preferences.getWindowHeight());
-            if (isObviouslyBadPersistedBounds(preferences.getWindowX(), preferences.getWindowY(), persistedW, persistedH)) {
-                AppLogger.get().warn("Ignoring invalid persisted window bounds; recentering window.");
+            double persistedW = preferences.getWindowWidth();
+            double persistedH = preferences.getWindowHeight();
+            if (isBugInflatedBounds(persistedW, persistedH)
+                    || isObviouslyBadPersistedBounds(preferences.getWindowX(), preferences.getWindowY(), persistedW, persistedH)) {
+                AppLogger.get().warn("Resetting invalid or bug-inflated window bounds; recentering window.");
                 applyCenteredDefaultBounds(stage);
             } else {
+                persistedW = Math.max(stage.getMinWidth(), persistedW);
+                persistedH = Math.max(stage.getMinHeight(), persistedH);
                 double[] xy = clampBoundsToScreens(preferences.getWindowX(), preferences.getWindowY(), persistedW, persistedH);
                 stage.setX(xy[0]);
                 stage.setY(xy[1]);
@@ -228,22 +245,41 @@ public final class PromptButlerApp extends Application {
         } else {
             applyCenteredDefaultBounds(stage);
         }
-        stage.xProperty().addListener((obs, oldValue, newValue) -> {
-            preferences.setWindowX(newValue.doubleValue());
-            persistPreferencesQuietly(preferencesRepository, prefsFile, preferences);
-        });
-        stage.yProperty().addListener((obs, oldValue, newValue) -> {
-            preferences.setWindowY(newValue.doubleValue());
-            persistPreferencesQuietly(preferencesRepository, prefsFile, preferences);
-        });
-        stage.widthProperty().addListener((obs, oldValue, newValue) -> {
-            preferences.setWindowWidth(newValue.doubleValue());
-            persistPreferencesQuietly(preferencesRepository, prefsFile, preferences);
-        });
-        stage.heightProperty().addListener((obs, oldValue, newValue) -> {
-            preferences.setWindowHeight(newValue.doubleValue());
-            persistPreferencesQuietly(preferencesRepository, prefsFile, preferences);
-        });
+
+        PauseTransition boundsDebounce = new PauseTransition(Duration.millis(300));
+        Runnable scheduleBoundsSave = () -> {
+            if (!stage.isShowing() || stage.isIconified() || stage.isMaximized()) {
+                return;
+            }
+            double w = stage.getWidth();
+            double h = stage.getHeight();
+            double x = stage.getX();
+            double y = stage.getY();
+            if (!areFiniteAndPositiveBounds(x, y, w, h)) {
+                return;
+            }
+            boundsDebounce.setOnFinished(e -> {
+                if (stage.isShowing() && !stage.isIconified() && !stage.isMaximized()) {
+                    double curW = stage.getWidth();
+                    double curH = stage.getHeight();
+                    double curX = stage.getX();
+                    double curY = stage.getY();
+                    if (areFiniteAndPositiveBounds(curX, curY, curW, curH)) {
+                        preferences.setWindowX(curX);
+                        preferences.setWindowY(curY);
+                        preferences.setWindowWidth(curW);
+                        preferences.setWindowHeight(curH);
+                        persistPreferencesQuietly(preferencesRepository, prefsFile, preferences);
+                    }
+                }
+            });
+            boundsDebounce.playFromStart();
+        };
+
+        stage.xProperty().addListener((obs, oldValue, newValue) -> scheduleBoundsSave.run());
+        stage.yProperty().addListener((obs, oldValue, newValue) -> scheduleBoundsSave.run());
+        stage.widthProperty().addListener((obs, oldValue, newValue) -> scheduleBoundsSave.run());
+        stage.heightProperty().addListener((obs, oldValue, newValue) -> scheduleBoundsSave.run());
 
         dataFileWatchService = new DataFileWatchService(
                 dataDir,
@@ -325,15 +361,6 @@ public final class PromptButlerApp extends Application {
         return grip;
     }
 
-    private static void applyContentBasedMinimumSize(Stage stage, MainView view, StackPane shell) {
-        shell.applyCss();
-        shell.layout();
-        double minWidth = Math.max(stage.getMinWidth(), Math.ceil(view.prefWidth(-1) + 24.0));
-        double minHeight = Math.max(stage.getMinHeight(), Math.ceil(view.prefHeight(minWidth) + 24.0));
-        stage.setMinWidth(minWidth);
-        stage.setMinHeight(minHeight);
-    }
-
     /** Taskbar / alt-tab icon; separate from in-scene title bar {@link com.viruchith.PromptButler.ui.MainView} icon. */
     private static void loadApplicationIcon(Stage stage) {
         try (InputStream in = PromptButlerApp.class.getResourceAsStream("/appicon.png")) {
@@ -398,17 +425,46 @@ public final class PromptButlerApp extends Application {
      * remain visible within the union of all connected screens.
      * Returns {@code [clampedX, clampedY]}.
      */
+    public static final double DEFAULT_WINDOW_WIDTH = 420.0;
+    public static final double DEFAULT_WINDOW_HEIGHT = 520.0;
+    public static final double MIN_WINDOW_WIDTH = 320.0;
+    public static final double MIN_WINDOW_HEIGHT = 360.0;
     private static final double MIN_VISIBLE_PX = 80.0;
     private static final double EXTREME_BOUNDS_FACTOR = 10.0;
 
-    private static void applyCenteredDefaultBounds(Stage stage) {
-        double w = Math.max(stage.getWidth(), stage.getMinWidth());
-        double h = Math.max(stage.getHeight(), stage.getMinHeight());
+    public static boolean isBugInflatedBounds(double w, double h) {
+        return Math.abs(w - 787.0) <= 2.0 && Math.abs(h - 582.0) <= 2.0;
+    }
+
+    public static void applyCenteredDefaultBounds(Stage stage) {
+        double w = (stage.getWidth() > 0 && Double.isFinite(stage.getWidth()))
+                ? stage.getWidth()
+                : (stage.getScene() != null && stage.getScene().getWidth() > 0 && Double.isFinite(stage.getScene().getWidth())
+                    ? stage.getScene().getWidth()
+                    : DEFAULT_WINDOW_WIDTH);
+        double h = (stage.getHeight() > 0 && Double.isFinite(stage.getHeight()))
+                ? stage.getHeight()
+                : (stage.getScene() != null && stage.getScene().getHeight() > 0 && Double.isFinite(stage.getScene().getHeight())
+                    ? stage.getScene().getHeight()
+                    : DEFAULT_WINDOW_HEIGHT);
+
+        w = Math.max(stage.getMinWidth() > 0 ? stage.getMinWidth() : MIN_WINDOW_WIDTH, w);
+        h = Math.max(stage.getMinHeight() > 0 ? stage.getMinHeight() : MIN_WINDOW_HEIGHT, h);
         stage.setWidth(w);
         stage.setHeight(h);
 
         // First launch/fallback: position explicitly instead of relying on platform defaults.
-        javafx.geometry.Rectangle2D primaryBounds = javafx.stage.Screen.getPrimary().getVisualBounds();
+        javafx.geometry.Rectangle2D primaryBounds = null;
+        try {
+            javafx.stage.Screen primary = javafx.stage.Screen.getPrimary();
+            if (primary != null) {
+                primaryBounds = primary.getVisualBounds();
+            }
+        } catch (Throwable ignored) {
+        }
+        if (primaryBounds == null) {
+            primaryBounds = new javafx.geometry.Rectangle2D(0, 0, 1920, 1080);
+        }
         double centeredX = primaryBounds.getMinX() + Math.max(0.0, (primaryBounds.getWidth() - w) / 2.0);
         double centeredY = primaryBounds.getMinY() + Math.max(0.0, (primaryBounds.getHeight() - h) / 2.0);
         double[] xy = clampBoundsToScreens(centeredX, centeredY, w, h);
@@ -439,7 +495,7 @@ public final class PromptButlerApp extends Application {
         return areBoundsExtremeForUnion(x, y, w, h, unionMinX, unionMinY, unionMaxX, unionMaxY);
     }
 
-    private static boolean areFiniteAndPositiveBounds(double x, double y, double w, double h) {
+    static boolean areFiniteAndPositiveBounds(double x, double y, double w, double h) {
         if (!Double.isFinite(x) || !Double.isFinite(y) || !Double.isFinite(w) || !Double.isFinite(h)) {
             return false;
         }
@@ -468,7 +524,7 @@ public final class PromptButlerApp extends Application {
         return x < minAllowedX || x > maxAllowedX || y < minAllowedY || y > maxAllowedY;
     }
 
-    private static double[] clampBoundsToScreens(double x, double y, double w, double h) {
+    static double[] clampBoundsToScreens(double x, double y, double w, double h) {
         double unionMinX = Double.MAX_VALUE;
         double unionMinY = Double.MAX_VALUE;
         double unionMaxX = -Double.MAX_VALUE;
