@@ -13,6 +13,7 @@ import javafx.scene.Scene;
 import javafx.scene.layout.StackPane;
 import javafx.stage.Stage;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
@@ -20,23 +21,35 @@ import org.mockito.Mockito;
 import java.util.Collections;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 public class WindowSizingTest {
 
+    private static boolean jfxAvailable = false;
+
     @BeforeAll
-    public static void initJfx() throws Exception {
-        CountDownLatch latch = new CountDownLatch(1);
+    public static void initJfx() {
         try {
-            Platform.startup(latch::countDown);
-        } catch (IllegalStateException e) {
-            latch.countDown();
+            CountDownLatch latch = new CountDownLatch(1);
+            try {
+                Platform.startup(latch::countDown);
+            } catch (IllegalStateException e) {
+                latch.countDown();
+            }
+            if (latch.await(5, TimeUnit.SECONDS)) {
+                jfxAvailable = true;
+            }
+        } catch (Throwable t) {
+            // Headless Linux or environments without display server
+            jfxAvailable = false;
         }
-        latch.await(5, TimeUnit.SECONDS);
     }
 
     @Test
     public void testApplyCenteredDefaultBoundsHandlesUnshownStage() throws Exception {
+        Assumptions.assumeTrue(jfxAvailable, "JavaFX toolkit could not be initialized (headless/no DISPLAY)");
         CountDownLatch latch = new CountDownLatch(1);
+        AtomicReference<Throwable> errorRef = new AtomicReference<>();
         Platform.runLater(() -> {
             try {
                 Stage stage = new Stage();
@@ -61,13 +74,18 @@ public class WindowSizingTest {
                 Assertions.assertFalse(Double.isNaN(stage.getX()));
                 Assertions.assertFalse(Double.isNaN(stage.getY()));
             } catch (Throwable t) {
-                t.printStackTrace();
-                Assertions.fail(t.getMessage());
+                errorRef.set(t);
             } finally {
                 latch.countDown();
             }
         });
-        Assertions.assertTrue(latch.await(5, TimeUnit.SECONDS));
+        Assertions.assertTrue(latch.await(5, TimeUnit.SECONDS), "Timeout waiting for JavaFX thread");
+        if (errorRef.get() != null) {
+            if (errorRef.get() instanceof AssertionError) {
+                throw (AssertionError) errorRef.get();
+            }
+            Assertions.fail(errorRef.get());
+        }
     }
 
     @Test
@@ -80,7 +98,9 @@ public class WindowSizingTest {
 
     @Test
     public void testFixedSizingStabilityAcrossRestarts() throws Exception {
+        Assumptions.assumeTrue(jfxAvailable, "JavaFX toolkit could not be initialized (headless/no DISPLAY)");
         CountDownLatch latch = new CountDownLatch(1);
+        AtomicReference<Throwable> errorRef = new AtomicReference<>();
         Platform.runLater(() -> {
             try {
                 PromptRepository repo = Mockito.mock(PromptRepository.class);
@@ -198,12 +218,17 @@ public class WindowSizingTest {
                 stage3.hide();
 
             } catch (Throwable t) {
-                t.printStackTrace();
-                Assertions.fail(t.getMessage());
+                errorRef.set(t);
             } finally {
                 latch.countDown();
             }
         });
-        Assertions.assertTrue(latch.await(5, TimeUnit.SECONDS));
+        Assertions.assertTrue(latch.await(5, TimeUnit.SECONDS), "Timeout waiting for JavaFX thread");
+        if (errorRef.get() != null) {
+            if (errorRef.get() instanceof AssertionError) {
+                throw (AssertionError) errorRef.get();
+            }
+            Assertions.fail(errorRef.get());
+        }
     }
 }

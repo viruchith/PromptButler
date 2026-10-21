@@ -36,7 +36,7 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       - name: Run tests
-        run: ./gradlew check --no-daemon
+        run: xvfb-run -a --server-args="-screen 0 1280x1024x24" ./gradlew check --no-daemon
 
       - name: Build fat JAR (cross-platform)
         run: ./gradlew shadowJar --no-daemon
