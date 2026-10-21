@@ -139,6 +139,7 @@ tasks.named('test', Test) {
     useJUnitPlatform()
     systemProperty 'prompt.butler.profile', envProfile
     jvmArgs '-Djava.awt.headless=true'
+    environment 'NO_AT_BRIDGE', '1'
 }
 
 jacoco {

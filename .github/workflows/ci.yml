@@ -29,6 +29,8 @@ jobs:
         run: ./gradlew classes testClasses --no-daemon
 
       - name: Run tests with JaCoCo coverage
+        env:
+          NO_AT_BRIDGE: '1'
         run: xvfb-run -a --server-args="-screen 0 1280x1024x24" ./gradlew check --no-daemon
 
       - name: Upload test report

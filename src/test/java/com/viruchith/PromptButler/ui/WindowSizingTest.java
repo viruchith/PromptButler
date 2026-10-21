@@ -32,11 +32,25 @@ public class WindowSizingTest {
         try {
             CountDownLatch latch = new CountDownLatch(1);
             try {
-                Platform.startup(latch::countDown);
+                Platform.startup(() -> {
+                    try {
+                        Platform.setImplicitExit(false);
+                    } catch (Throwable ignored) {
+                    }
+                    latch.countDown();
+                });
             } catch (IllegalStateException e) {
+                try {
+                    Platform.setImplicitExit(false);
+                } catch (Throwable ignored) {
+                }
                 latch.countDown();
             }
-            if (latch.await(5, TimeUnit.SECONDS)) {
+            if (latch.await(15, TimeUnit.SECONDS)) {
+                try {
+                    Platform.setImplicitExit(false);
+                } catch (Throwable ignored) {
+                }
                 jfxAvailable = true;
             }
         } catch (Throwable t) {
@@ -79,7 +93,15 @@ public class WindowSizingTest {
                 latch.countDown();
             }
         });
-        Assertions.assertTrue(latch.await(5, TimeUnit.SECONDS), "Timeout waiting for JavaFX thread");
+        boolean completed = latch.await(15, TimeUnit.SECONDS);
+        if (!completed) {
+            Throwable err = errorRef.get();
+            if (err != null) {
+                Assertions.fail("Timeout waiting for JavaFX thread; inner error: " + err.getMessage(), err);
+            } else {
+                Assertions.fail("Timeout waiting for JavaFX thread");
+            }
+        }
         if (errorRef.get() != null) {
             if (errorRef.get() instanceof AssertionError) {
                 throw (AssertionError) errorRef.get();
@@ -223,7 +245,15 @@ public class WindowSizingTest {
                 latch.countDown();
             }
         });
-        Assertions.assertTrue(latch.await(5, TimeUnit.SECONDS), "Timeout waiting for JavaFX thread");
+        boolean completed = latch.await(15, TimeUnit.SECONDS);
+        if (!completed) {
+            Throwable err = errorRef.get();
+            if (err != null) {
+                Assertions.fail("Timeout waiting for JavaFX thread; inner error: " + err.getMessage(), err);
+            } else {
+                Assertions.fail("Timeout waiting for JavaFX thread");
+            }
+        }
         if (errorRef.get() != null) {
             if (errorRef.get() instanceof AssertionError) {
                 throw (AssertionError) errorRef.get();

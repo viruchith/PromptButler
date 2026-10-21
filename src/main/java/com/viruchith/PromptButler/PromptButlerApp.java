@@ -454,7 +454,17 @@ public final class PromptButlerApp extends Application {
         stage.setHeight(h);
 
         // First launch/fallback: position explicitly instead of relying on platform defaults.
-        javafx.geometry.Rectangle2D primaryBounds = javafx.stage.Screen.getPrimary().getVisualBounds();
+        javafx.geometry.Rectangle2D primaryBounds = null;
+        try {
+            javafx.stage.Screen primary = javafx.stage.Screen.getPrimary();
+            if (primary != null) {
+                primaryBounds = primary.getVisualBounds();
+            }
+        } catch (Throwable ignored) {
+        }
+        if (primaryBounds == null) {
+            primaryBounds = new javafx.geometry.Rectangle2D(0, 0, 1920, 1080);
+        }
         double centeredX = primaryBounds.getMinX() + Math.max(0.0, (primaryBounds.getWidth() - w) / 2.0);
         double centeredY = primaryBounds.getMinY() + Math.max(0.0, (primaryBounds.getHeight() - h) / 2.0);
         double[] xy = clampBoundsToScreens(centeredX, centeredY, w, h);
