@@ -171,28 +171,24 @@ public final class PromptButlerApp extends Application {
         shell.getStyleClass().add("root");
         StackPane.setAlignment(mainView, Pos.TOP_LEFT);
         mainView.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
-        Region resizeGrip = createSouthEastResizeGrip(stage);
-        shell.getChildren().addAll(mainView, resizeGrip);
+        shell.getChildren().add(mainView);
         Scene scene = new Scene(shell, DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT);
-        OverlayStageFactory.applySceneBackgroundTransparent(scene);
         applyTheme(scene, profile, preferences.isDarkMode());
         stage.setScene(scene);
         stage.setOnCloseRequest(e -> {
-            e.consume();
             if (stage.isShowing() && !stage.isIconified() && !stage.isMaximized()) {
-                double curW = stage.getWidth();
-                double curH = stage.getHeight();
                 double curX = stage.getX();
                 double curY = stage.getY();
-                if (areFiniteAndPositiveBounds(curX, curY, curW, curH)) {
+                if (Double.isFinite(curX) && Double.isFinite(curY)) {
                     preferences.setWindowX(curX);
                     preferences.setWindowY(curY);
-                    preferences.setWindowWidth(curW);
-                    preferences.setWindowHeight(curH);
+                    preferences.setWindowWidth(DEFAULT_WINDOW_WIDTH);
+                    preferences.setWindowHeight(DEFAULT_WINDOW_HEIGHT);
                     persistPreferencesQuietly(preferencesRepository, prefsFile, preferences);
                 }
             }
-            stage.hide();
+            Platform.exit();
+            System.exit(0);
         });
 
         mainView.attachGlobalKeys();
@@ -226,49 +222,51 @@ public final class PromptButlerApp extends Application {
             AppLogger.get().error("Global hotkey registration failed; use window controls only.", e);
         }
 
+        stage.setWidth(DEFAULT_WINDOW_WIDTH);
+        stage.setHeight(DEFAULT_WINDOW_HEIGHT);
+
         if (preferences.hasWindowBounds()) {
+            double posX = preferences.getWindowX();
+            double posY = preferences.getWindowY();
             double persistedW = preferences.getWindowWidth();
             double persistedH = preferences.getWindowHeight();
             if (isBugInflatedBounds(persistedW, persistedH)
-                    || isObviouslyBadPersistedBounds(preferences.getWindowX(), preferences.getWindowY(), persistedW, persistedH)) {
+                    || isObviouslyBadPersistedBounds(posX, posY, DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT)) {
                 AppLogger.get().warn("Resetting invalid or bug-inflated window bounds; recentering window.");
                 applyCenteredDefaultBounds(stage);
             } else {
-                persistedW = Math.max(stage.getMinWidth(), persistedW);
-                persistedH = Math.max(stage.getMinHeight(), persistedH);
-                double[] xy = clampBoundsToScreens(preferences.getWindowX(), preferences.getWindowY(), persistedW, persistedH);
+                double[] xy = clampBoundsToScreens(posX, posY, DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT);
                 stage.setX(xy[0]);
                 stage.setY(xy[1]);
-                stage.setWidth(persistedW);
-                stage.setHeight(persistedH);
+                stage.setWidth(DEFAULT_WINDOW_WIDTH);
+                stage.setHeight(DEFAULT_WINDOW_HEIGHT);
             }
         } else {
             applyCenteredDefaultBounds(stage);
         }
+
+        preferences.setWindowWidth(DEFAULT_WINDOW_WIDTH);
+        preferences.setWindowHeight(DEFAULT_WINDOW_HEIGHT);
 
         PauseTransition boundsDebounce = new PauseTransition(Duration.millis(300));
         Runnable scheduleBoundsSave = () -> {
             if (!stage.isShowing() || stage.isIconified() || stage.isMaximized()) {
                 return;
             }
-            double w = stage.getWidth();
-            double h = stage.getHeight();
             double x = stage.getX();
             double y = stage.getY();
-            if (!areFiniteAndPositiveBounds(x, y, w, h)) {
+            if (!Double.isFinite(x) || !Double.isFinite(y)) {
                 return;
             }
             boundsDebounce.setOnFinished(e -> {
                 if (stage.isShowing() && !stage.isIconified() && !stage.isMaximized()) {
-                    double curW = stage.getWidth();
-                    double curH = stage.getHeight();
                     double curX = stage.getX();
                     double curY = stage.getY();
-                    if (areFiniteAndPositiveBounds(curX, curY, curW, curH)) {
+                    if (Double.isFinite(curX) && Double.isFinite(curY)) {
                         preferences.setWindowX(curX);
                         preferences.setWindowY(curY);
-                        preferences.setWindowWidth(curW);
-                        preferences.setWindowHeight(curH);
+                        preferences.setWindowWidth(DEFAULT_WINDOW_WIDTH);
+                        preferences.setWindowHeight(DEFAULT_WINDOW_HEIGHT);
                         persistPreferencesQuietly(preferencesRepository, prefsFile, preferences);
                     }
                 }
@@ -278,8 +276,6 @@ public final class PromptButlerApp extends Application {
 
         stage.xProperty().addListener((obs, oldValue, newValue) -> scheduleBoundsSave.run());
         stage.yProperty().addListener((obs, oldValue, newValue) -> scheduleBoundsSave.run());
-        stage.widthProperty().addListener((obs, oldValue, newValue) -> scheduleBoundsSave.run());
-        stage.heightProperty().addListener((obs, oldValue, newValue) -> scheduleBoundsSave.run());
 
         dataFileWatchService = new DataFileWatchService(
                 dataDir,
@@ -524,7 +520,29 @@ public final class PromptButlerApp extends Application {
         return x < minAllowedX || x > maxAllowedX || y < minAllowedY || y > maxAllowedY;
     }
 
-    static double[] clampBoundsToScreens(double x, double y, double w, double h) {
+    public static double[] clampBoundsToScreens(double x, double y, double w, double h) {
+        javafx.stage.Screen targetScreen = null;
+        try {
+            for (javafx.stage.Screen screen : javafx.stage.Screen.getScreens()) {
+                javafx.geometry.Rectangle2D vb = screen.getVisualBounds();
+                if (vb.contains(x + w / 2.0, y + h / 2.0)) {
+                    targetScreen = screen;
+                    break;
+                }
+            }
+            if (targetScreen == null) {
+                targetScreen = javafx.stage.Screen.getPrimary();
+            }
+        } catch (Throwable ignored) {
+        }
+
+        if (targetScreen != null) {
+            javafx.geometry.Rectangle2D vb = targetScreen.getVisualBounds();
+            double clampedX = Math.max(vb.getMinX(), Math.min(x, vb.getMaxX() - w));
+            double clampedY = Math.max(vb.getMinY(), Math.min(y, vb.getMaxY() - h));
+            return new double[]{clampedX, clampedY};
+        }
+
         double unionMinX = Double.MAX_VALUE;
         double unionMinY = Double.MAX_VALUE;
         double unionMaxX = -Double.MAX_VALUE;
@@ -540,9 +558,8 @@ public final class PromptButlerApp extends Application {
             // No screens detected — return unchanged.
             return new double[]{x, y};
         }
-        // Ensure at least MIN_VISIBLE_PX of the window is within screen bounds on each axis.
-        double clampedX = Math.min(Math.max(x, unionMinX - w + MIN_VISIBLE_PX), unionMaxX - MIN_VISIBLE_PX);
-        double clampedY = Math.min(Math.max(y, unionMinY - h + MIN_VISIBLE_PX), unionMaxY - MIN_VISIBLE_PX);
+        double clampedX = Math.max(unionMinX, Math.min(x, unionMaxX - w));
+        double clampedY = Math.max(unionMinY, Math.min(y, unionMaxY - h));
         return new double[]{clampedX, clampedY};
     }
 }
