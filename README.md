@@ -14,7 +14,7 @@ For **developers** (architecture, packages, build internals, extension points), 
 
 ---
 
-**Version:** `0.4.4` (see `build.gradle` → `version`).
+**Version:** `0.4.5` (see `build.gradle` → `version`).
 
 ## Table of contents
 
@@ -70,7 +70,7 @@ flowchart LR
 
 - Press **Ctrl+Alt+P** (Windows/Linux) or **Cmd+Alt+P** (macOS), **or** use the tray icon if you enabled tray auto-hide in `preferences.json`.
 - The window is an **always-on-top** card: **Prompt Butler** title strip, search box, list of prompts, toolbar at the bottom.
-- **Move the window:** drag anywhere on the **Prompt Butler** title strip at the top (there is no native title bar because the overlay uses a transparent frame).
+- **Move, minimize, maximize, or exit:** Use the standard OS title bar at the top of the window with native minimize, maximize, and exit controls.
 
 ### 2. Find a prompt
 
@@ -310,7 +310,7 @@ Uses the [Shadow plugin](https://gradleup.com/shadow/) to produce one self-conta
 .\gradlew.bat shadowJar
 ```
 
-Output: `build/libs/prompt-butler-0.4.4-all.jar`
+Output: `build/libs/prompt-butler-0.4.5-all.jar`
 
 **Run on the target machine:**
 
@@ -318,10 +318,10 @@ Output: `build/libs/prompt-butler-0.4.4-all.jar`
 # macOS / Linux
 java --add-exports=javafx.graphics/com.sun.glass.ui=ALL-UNNAMED \
      --add-opens=javafx.graphics/com.sun.glass.ui=ALL-UNNAMED \
-     -jar build/libs/prompt-butler-0.4.4-all.jar
+     -jar build/libs/prompt-butler-0.4.5-all.jar
 
 # Windows (single line)
-java --add-exports=javafx.graphics/com.sun.glass.ui=ALL-UNNAMED --add-opens=javafx.graphics/com.sun.glass.ui=ALL-UNNAMED -jar build\libs\prompt-butler-0.4.4-all.jar
+java --add-exports=javafx.graphics/com.sun.glass.ui=ALL-UNNAMED --add-opens=javafx.graphics/com.sun.glass.ui=ALL-UNNAMED -jar build\libs\prompt-butler-0.4.5-all.jar
 ```
 
 > **Why the JVM flags?** `PromptButlerApp` accesses `com.sun.glass.ui` internals for the global hotkey and tray integration. These are the same flags already declared in `applicationDefaultJvmArgs` in `build.gradle` for the `run` and `installDist` paths.

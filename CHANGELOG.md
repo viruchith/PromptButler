@@ -2,6 +2,22 @@
 
 All notable changes to Prompt Butler are documented in this file.
 
+## 0.4.5
+
+### Added
+
+- Enabled default OS title bar (`StageStyle.DECORATED`) on the main window supporting native minimize, maximize, and exit controls.
+- Added dedicated **About** button to the main toolbar in `MainView` for easy access to licensing, project details, and version information.
+- Added automated unit tests in `WindowSizingTest` verifying `StageStyle.DECORATED` is applied and multi-directional bounds clamping prevents screen overflow.
+
+### Fixed
+
+- Fixed an issue where reopening the application retained bloated, inflated, or maximized window sizes and caused the window to overflow the screen.
+- Main window now opens reliably at standard default dimensions (`420x520`) with clean resets for stale, oversized, or bug-inflated window sizes in preferences.
+- Enhanced `clampBoundsToScreens` to clamp both position and dimensions strictly within target display visual bounds, preventing the window from overflowing screen edges.
+- Removed the custom corner resize grip and undecorated drag listeners, delegating window movement and resizing to the native OS window manager.
+- Updated stylesheets with theme-aware solid backgrounds matching the app panel for clean OS-decorated window rendering.
+
 ## 0.4.4
 
 ### Fixed

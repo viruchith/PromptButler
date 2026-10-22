@@ -1,7 +1,7 @@
 /* Dev profile: same light UI + visible debug border on main panel */
 
 .root {
-    -fx-background-color: transparent;
+    -fx-background-color: #f0f2f5;
     -fx-padding: 0;
 }
 

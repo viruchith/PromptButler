@@ -2,7 +2,7 @@
 
 This document is for **developers** maintaining or extending the codebase. End-user usage remains in [README.md](README.md).
 
-Current project version: **`0.4.4`**.
+Current project version: **`0.4.5`**.
 
 ---
 
@@ -80,20 +80,19 @@ flowchart LR
 
 ### 4.3 Stage and scene graph
 
-1. **`OverlayStageFactory.applyOverlayChrome`** — `StageStyle.TRANSPARENT`, `alwaysOnTop`, optional dev opacity.
-2. **`MainView`** — root content: title strip (icon + drag region), search, `ListView`, toolbar, status.
-3. **`StackPane` shell** — holds `MainView` (top-left) and a small **south-east `Region`** used as a **resize grip** (mouse drag updates `stage` width/height with minimum bounds).
-4. **`Scene`** — transparent fill (`OverlayStageFactory.applySceneBackgroundTransparent`) so rounded `app-panel` CSS shows correctly on the desktop.
+1. **`OverlayStageFactory.applyOverlayChrome`** — `StageStyle.DECORATED` (native OS title bar with minimize, maximize, and exit controls), `alwaysOnTop`, optional dev opacity.
+2. **`MainView`** — root content: header strip (icon, title, quick help), search, `ListView`, toolbar (including About and Quit), status.
+3. **`StackPane` shell** — holds `MainView` (top-left). Resizing is handled natively by the OS window manager.
+4. **`Scene`** — theme-aware solid fill matching `app-panel` so the OS-decorated window integrates cleanly.
 5. **Stylesheets** — `/styles/overlay.css`, `overlay-dev.css`, or `overlay-dark.css` from classpath (theme is preference-driven at runtime). These now also style preview tabs and the split markdown/raw prompt view.
-6. **`stage.setOnCloseRequest`** — **consumes** the default close action and **hides** the stage (overlay pattern, not process exit).
+6. **`stage.setOnCloseRequest`** — invokes `Platform.exit()` and `System.exit(0)` to exit the application cleanly when the OS title bar exit button is clicked.
 7. **`loadApplicationIcon`** — adds `/appicon.png` to `stage.getIcons()` for taskbar / OS integration.
-8. **Window sizing and bounds stability** — the overlay maintains fixed minimum dimensions (320×360) and a default scene size (420×520). The toolbar uses a wrapping `FlowPane` (wrap length 380) so buttons flow naturally across rows without forcing wide minimum stages. Persisted window bounds are debounced (300 ms), validated against finite screen dimensions, and guarded against minimized states; stylesheet reloading in `applyUpdatedPreferences()` is restricted to actual dark-mode transitions to prevent feedback loops.
+8. **Window sizing and bounds stability** — the window opens at default dimensions (420×520, minimum 320×360) and centers or clamps strictly within the target screen's visual bounds. Width and height are bounded so the window never overflows the display or retains unintended enlarged/maximized sizes across launches. The toolbar uses a wrapping `FlowPane` (wrap length 380) so buttons flow naturally across rows. Window position changes are debounced (300 ms) and validated against finite screen dimensions.
 
 ```mermaid
 flowchart TD
-    Stage[JavaFX Stage] --> Shell[StackPane shell]
+    Stage[JavaFX Stage - OS Decorated] --> Shell[StackPane shell]
     Shell --> MainView[MainView app panel]
-    Shell --> Grip[Resize grip]
     MainView --> Title[Title strip]
     MainView --> Search[Search + category filter]
     MainView --> List[ListView]

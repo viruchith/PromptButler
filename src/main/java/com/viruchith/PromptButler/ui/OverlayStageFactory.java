@@ -22,7 +22,7 @@ public final class OverlayStageFactory {
     public static void applyOverlayChrome(Stage stage, BuildProfile profile) {
         Objects.requireNonNull(stage, "stage");
         Objects.requireNonNull(profile, "profile");
-        stage.initStyle(StageStyle.TRANSPARENT);
+        stage.initStyle(StageStyle.DECORATED);
         stage.setAlwaysOnTop(true);
         if (profile.isDev()) {
             stage.setOpacity(1.0);
@@ -30,6 +30,6 @@ public final class OverlayStageFactory {
     }
 
     public static void applySceneBackgroundTransparent(Scene scene) {
-        scene.setFill(Color.TRANSPARENT);
+        // Retained for backward-compatibility; decorated windows use theme background.
     }
 }

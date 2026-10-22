@@ -86,8 +86,8 @@ PromptButler/
 
 ### Window / overlay
 
-- **Undecorated**, **transparent** `StageStyle.TRANSPARENT`, **always on top** (`OverlayStageFactory`).
-- **Scene fill** transparent so the **rounded light panel** (`MainView` + CSS) shows as a card over the desktop.
+- **Decorated** `StageStyle.DECORATED` with default OS title bar (minimize, maximize, exit), **always on top** (`OverlayStageFactory`).
+- **Scene fill** solid themed background matching `app-panel` (`overlay.css` or `overlay-dark.css`).
 - **UI theme:** light/dark via preferences. Main scene stylesheet is switched at runtime, and dialogs use matching stylesheet (`overlay.css` or `overlay-dark.css`).
 
 ### Auto-hide (`AutoHideController` + `UserPreferences`)

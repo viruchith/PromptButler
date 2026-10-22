@@ -1,7 +1,7 @@
 /* Dark UI theme — dark backgrounds, light text */
 
 .root {
-    -fx-background-color: transparent;
+    -fx-background-color: #1e1e2e;
     -fx-padding: 0;
 }
 

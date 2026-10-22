@@ -12,6 +12,7 @@ import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.layout.StackPane;
 import javafx.stage.Stage;
+import javafx.stage.StageStyle;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeAll;
@@ -258,6 +259,70 @@ public class WindowSizingTest {
             if (errorRef.get() instanceof AssertionError) {
                 throw (AssertionError) errorRef.get();
             }
+            Assertions.fail(errorRef.get());
+        }
+    }
+
+    @Test
+    public void testOverlayStageFactoryAppliesDecoratedStyle() throws Exception {
+        Assumptions.assumeTrue(jfxAvailable, "JavaFX toolkit could not be initialized");
+        CountDownLatch latch = new CountDownLatch(1);
+        AtomicReference<Throwable> errorRef = new AtomicReference<>();
+        Platform.runLater(() -> {
+            try {
+                Stage stage = new Stage();
+                OverlayStageFactory.applyOverlayChrome(stage, BuildProfile.PROD);
+                Assertions.assertEquals(StageStyle.DECORATED, stage.getStyle());
+                Assertions.assertTrue(stage.isAlwaysOnTop());
+            } catch (Throwable t) {
+                errorRef.set(t);
+            } finally {
+                latch.countDown();
+            }
+        });
+        Assertions.assertTrue(latch.await(15, TimeUnit.SECONDS));
+        if (errorRef.get() != null) {
+            Assertions.fail(errorRef.get());
+        }
+    }
+
+    @Test
+    public void testClampBoundsToScreensPreventsOverflow() throws Exception {
+        Assumptions.assumeTrue(jfxAvailable, "JavaFX toolkit could not be initialized");
+        CountDownLatch latch = new CountDownLatch(1);
+        AtomicReference<Throwable> errorRef = new AtomicReference<>();
+        Platform.runLater(() -> {
+            try {
+                javafx.stage.Screen primary = javafx.stage.Screen.getPrimary();
+                if (primary == null) {
+                    return;
+                }
+                javafx.geometry.Rectangle2D vb = primary.getVisualBounds();
+                double w = PromptButlerApp.DEFAULT_WINDOW_WIDTH;
+                double h = PromptButlerApp.DEFAULT_WINDOW_HEIGHT;
+
+                // Test right overflow
+                double[] clampedRight = PromptButlerApp.clampBoundsToScreens(vb.getMaxX() + 500, vb.getMinY() + 10, w, h);
+                Assertions.assertTrue(clampedRight[0] + w <= vb.getMaxX() + 0.001);
+                Assertions.assertTrue(clampedRight[0] >= vb.getMinX());
+
+                // Test left underflow
+                double[] clampedLeft = PromptButlerApp.clampBoundsToScreens(vb.getMinX() - 500, vb.getMinY() + 10, w, h);
+                Assertions.assertTrue(clampedLeft[0] >= vb.getMinX());
+                Assertions.assertTrue(clampedLeft[0] + w <= vb.getMaxX() + 0.001);
+
+                // Test bottom overflow
+                double[] clampedBottom = PromptButlerApp.clampBoundsToScreens(vb.getMinX() + 10, vb.getMaxY() + 500, w, h);
+                Assertions.assertTrue(clampedBottom[1] + h <= vb.getMaxY() + 0.001);
+                Assertions.assertTrue(clampedBottom[1] >= vb.getMinY());
+            } catch (Throwable t) {
+                errorRef.set(t);
+            } finally {
+                latch.countDown();
+            }
+        });
+        Assertions.assertTrue(latch.await(15, TimeUnit.SECONDS));
+        if (errorRef.get() != null) {
             Assertions.fail(errorRef.get());
         }
     }

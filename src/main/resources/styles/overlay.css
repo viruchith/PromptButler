@@ -1,7 +1,7 @@
 /* Light UI — solid backgrounds, high-contrast text (main window + dialogs) */
 
 .root {
-    -fx-background-color: transparent;
+    -fx-background-color: #f0f2f5;
     -fx-padding: 0;
 }
 

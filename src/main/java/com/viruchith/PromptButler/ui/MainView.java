@@ -167,8 +167,6 @@ public final class MainView extends VBox {
             showAboutWindow();
         });
         titleBar.getChildren().addAll(titleIcon, appTitle, titleDragSpacer, helpAbout);
-        titleBar.setCursor(Cursor.MOVE);
-        installUndecoratedStageDrag(titleBar, stage);
         statusLabel.getStyleClass().add("hint-label");
         statusLabel.getStyleClass().add("toast-label");
         statusLabel.setMinHeight(18);
@@ -270,7 +268,7 @@ public final class MainView extends VBox {
         String implVer = MainView.class.getPackage() != null
                 ? MainView.class.getPackage().getImplementationVersion()
                 : null;
-        String versionLine = (implVer == null || implVer.isEmpty()) ? "0.4.4" : implVer;
+        String versionLine = (implVer == null || implVer.isEmpty()) ? "0.4.5" : implVer;
         Label version = new Label("Version " + versionLine);
         version.getStyleClass().add("preview-label");
 
@@ -534,11 +532,14 @@ public final class MainView extends VBox {
         styleToolbarButton(undoDeleteButton, FontAwesomeSolid.UNDO, "Restore the most recently deleted prompt.");
         undoDeleteButton.setDisable(true);
         undoDeleteButton.setOnAction(e -> undoLastDelete());
+        Button aboutBtn = new Button("About");
+        styleToolbarButton(aboutBtn, FontAwesomeSolid.QUESTION_CIRCLE, "About Prompt Butler — license and links.");
+        aboutBtn.setOnAction(e -> showAboutWindow());
         Button quit = new Button("Quit");
         styleToolbarButton(quit, FontAwesomeSolid.SIGN_OUT_ALT, "Exit the application.");
         quit.setOnAction(e -> System.exit(0));
         toolbar.setPrefWrapLength(380);
-        toolbar.getChildren().addAll(newBtn, shortcutsBtn, importBtn, exportBtn, settingsBtn, dataBtn, undoDeleteButton, quit);
+        toolbar.getChildren().addAll(newBtn, shortcutsBtn, importBtn, exportBtn, settingsBtn, dataBtn, undoDeleteButton, aboutBtn, quit);
     }
 
     private void onDataFolderSettings() {
