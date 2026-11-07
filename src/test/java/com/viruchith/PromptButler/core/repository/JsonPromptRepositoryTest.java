@@ -76,6 +76,24 @@ class JsonPromptRepositoryTest {
     }
 
     @Test
+    void roundTripPreservesPlainTextFormattingExactly(@TempDir Path dir) throws Exception {
+        Path f = dir.resolve("prompts.json");
+        JsonPromptRepository repo = new JsonPromptRepository(f, validator);
+        String body = "  leading spaces\n\n\n\tTab\tseparated\r\n    ```java\n    code();\n    ```\n"
+                + "<b>not html</b> & **not markdown** [link](http://x)\n"
+                + "हिन्दी 日本語 한국어 עברית 👨‍👩‍👧‍👦 👍🏿 ✅\n\n";
+        PromptTemplate template = new PromptTemplate("fmt", "Formatting", body, Arrays.asList(),
+                false, "General", 0L, 0L, Arrays.asList(new PromptTemplate.Revision("\n  old\tbody  \n", 1L)));
+        repo.saveAll(Arrays.asList(template));
+        String json = new String(Files.readAllBytes(f), StandardCharsets.UTF_8);
+        assertTrue(json.contains("👨‍👩‍👧‍👦"));
+        assertTrue(json.contains("<b>not html</b> &"));
+        PromptTemplate loaded = repo.loadAll().get(0);
+        assertEquals(body, loaded.getBody());
+        assertEquals("\n  old\tbody  \n", loaded.getRevisions().get(0).getBody());
+    }
+
+    @Test
     void roundTripPreservesRequestedLanguageSet(@TempDir Path dir) throws Exception {
         Path f = dir.resolve("prompts.json");
         JsonPromptRepository repo = new JsonPromptRepository(f, validator);

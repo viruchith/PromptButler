@@ -193,27 +193,6 @@
     -fx-background-radius: 4;
 }
 
-.split-pane {
-    -fx-background-color: transparent;
-}
-
-.split-pane-divider {
-    -fx-background-color: #45475a;
-    -fx-padding: 0 1 0 1;
-}
-
-.tab-pane .tab-header-area .tab-header-background {
-    -fx-background-color: transparent;
-}
-
-.tab-pane .tab {
-    -fx-background-color: #45475a;
-}
-
-.tab-pane .tab:selected {
-    -fx-background-color: #313244;
-}
-
 .hyperlink {
     -fx-text-fill: #89b4fa;
 }

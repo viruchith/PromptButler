@@ -192,6 +192,13 @@ class TemplateCompilerTest {
     }
 
     @Test
+    void compilePreservesSurroundingWhitespaceAndIndentation() {
+        Map<String, String> m = new HashMap<String, String>();
+        m.put("name", "Ada");
+        assertEquals("\n\t  Hi Ada,\n\n    # literal 🚀\n", compiler.compile("\n\t  Hi {{name}},\n\n    # literal 🚀\n", m));
+    }
+
+    @Test
     void compilesRequestedLanguagesWithoutLoss() {
         String body = "{{english}}\n{{french}}\n{{russian}}\n{{hindi}}\n{{tamil}}\n{{arabic}}\n{{farsi}}\n{{chinese_simplified}}\n{{chinese_traditional}}\n{{japanese}}\n{{korean}}\n{{thai}}\n{{swahili}}";
         Map<String, String> m = new HashMap<String, String>();

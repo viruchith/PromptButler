@@ -2,6 +2,19 @@
 
 All notable changes to Prompt Butler are documented in this file.
 
+## 0.4.6
+
+### Removed
+
+- Removed all Markdown support: the `SafeMarkdownRenderer`, the rendered preview in the prompt detail window, and the **Preview** tab in the prompt editor.
+- Removed the `flexmark-all`, `jsoup`, and `javafx-web` (WebKit, plus transitive `javafx-media`) dependencies and the `javafx.web` module. This shrinks the fat JAR from ~142 MiB to ~14.4 MiB.
+
+### Changed
+
+- Prompt bodies are now plain text end to end. The detail window and editor show the body in a plain-text area, and existing Markdown stays literal text.
+- Prompt bodies (including revision history and compiled output) are no longer trimmed, so leading/trailing whitespace, blank lines, and indentation are preserved exactly. Unicode NFC normalization is still applied.
+- The About window now states that prompts are plain text and shows version 0.4.6. The shortcuts help lists F1 and the plain-text detail window.
+
 ## 0.4.5
 
 ### Added

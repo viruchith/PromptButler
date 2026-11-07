@@ -14,7 +14,8 @@ import java.util.Objects;
  * Immutable prompt template (id, title, body with {@code {{var}}} placeholders, tags).
  * <p>
  * Constructor normalizes all text fields via {@link com.viruchith.PromptButler.core.util.InputText}
- * and drops blank tags so persisted and UI-derived data stay consistent.
+ * and drops blank tags so persisted and UI-derived data stay consistent. The body is plain text:
+ * it is NFC-normalized but never trimmed, so whitespace, line breaks, and indentation are kept verbatim.
  * </p>
  */
 public final class PromptTemplate {
@@ -54,7 +55,7 @@ public final class PromptTemplate {
             throw new IllegalArgumentException("id cannot be blank");
         }
         this.title = InputText.trimToEmpty(Objects.requireNonNull(title, "title"));
-        this.body = InputText.trimToEmpty(Objects.requireNonNull(body, "body"));
+        this.body = InputText.normalizeUnicode(Objects.requireNonNull(body, "body"));
         if (tags == null) {
             this.tags = Collections.emptyList();
         } else {
@@ -127,7 +128,7 @@ public final class PromptTemplate {
     }
 
     public PromptTemplate withEditedContent(String nextTitle, String nextBody, List<String> nextTags, String nextCategory) {
-        String normalizedNextBody = InputText.trimToEmpty(nextBody);
+        String normalizedNextBody = InputText.normalizeUnicode(nextBody);
         List<Revision> nextRevisions = revisions;
         if (!body.equals(normalizedNextBody)) {
             ArrayList<Revision> all = new ArrayList<Revision>();
@@ -218,7 +219,7 @@ public final class PromptTemplate {
         private final long updatedAtEpochMillis;
 
         public Revision(String body, long updatedAtEpochMillis) {
-            this.body = InputText.trimToEmpty(Objects.requireNonNull(body, "body"));
+            this.body = InputText.normalizeUnicode(Objects.requireNonNull(body, "body"));
             this.updatedAtEpochMillis = Math.max(0L, updatedAtEpochMillis);
         }
 

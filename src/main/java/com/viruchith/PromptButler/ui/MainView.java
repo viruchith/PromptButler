@@ -28,9 +28,6 @@ import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
 import javafx.scene.control.SelectionMode;
-import javafx.scene.control.SplitPane;
-import javafx.scene.control.Tab;
-import javafx.scene.control.TabPane;
 import javafx.scene.control.TextInputDialog;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
@@ -49,7 +46,6 @@ import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
-import javafx.scene.web.WebView;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
@@ -268,9 +264,14 @@ public final class MainView extends VBox {
         String implVer = MainView.class.getPackage() != null
                 ? MainView.class.getPackage().getImplementationVersion()
                 : null;
-        String versionLine = (implVer == null || implVer.isEmpty()) ? "0.4.5" : implVer;
+        String versionLine = (implVer == null || implVer.isEmpty()) ? "0.4.6" : implVer;
         Label version = new Label("Version " + versionLine);
         version.getStyleClass().add("preview-label");
+
+        Label summary = new Label("Search prompt templates, fill {{placeholders}}, and copy the result. "
+                + "Prompt bodies are stored and shown as plain text, exactly as written, including line breaks, "
+                + "indentation, emoji, and multilingual text.");
+        summary.setWrapText(true);
 
         Label author = new Label("Author: Viruchith Ganesan");
 
@@ -295,11 +296,11 @@ public final class MainView extends VBox {
         styleToolbarButton(closeB, FontAwesomeSolid.TIMES, "Close this window.");
         closeB.setOnAction(e -> w.close());
 
-        VBox root = new VBox(10, heading, version, author, repo, copyright, licenseArea, closeB);
+        VBox root = new VBox(10, heading, version, summary, author, repo, copyright, licenseArea, closeB);
         root.getStyleClass().add("app-panel");
         root.setPadding(new Insets(12));
 
-        Scene scene = new Scene(root, 420, 420);
+        Scene scene = new Scene(root, 440, 480);
         copyApplicationStylesheetsTo(scene);
         scene.addEventFilter(KeyEvent.KEY_PRESSED, ev -> {
             if (ev.getCode() == KeyCode.ESCAPE) {
@@ -629,8 +630,10 @@ public final class MainView extends VBox {
         a.setContentText(
                 "Ctrl/Cmd+C (list focused): copy selected prompt body\n"
                         + "Enter: open selected prompt or variable form\n"
+                        + "Single-click a row: open the plain-text detail window\n"
                         + "Ctrl/Cmd+Enter in variable form: next field / copy on last\n"
                         + "Up/Down: navigate list\n"
+                        + "F1: show this shortcut list\n"
                         + "Escape: close variable window or hide overlay\n"
                         + "Global: Ctrl+Alt+P (Win/Linux) or Cmd+Alt+P (macOS)");
         styleStandardAlertButtons(a.getDialogPane());
@@ -1185,8 +1188,6 @@ public final class MainView extends VBox {
         metadata.setWrapText(true);
 
         TextArea content = buildReadOnlyPreviewArea(PromptTextFormatter.nullToEmpty(t.getBody()), "Prompt body");
-        WebView markdownPreview = buildMarkdownPreview(PromptTextFormatter.nullToEmpty(t.getBody()));
-        SplitPane previewSplit = buildPromptPreviewSplit(content, markdownPreview);
 
         Button copyB = new Button("Copy");
         styleToolbarButton(copyB, FontAwesomeSolid.COPY, "Copy prompt body to clipboard.");
@@ -1238,7 +1239,7 @@ public final class MainView extends VBox {
         closeB.setOnAction(e -> closePromptDetailWindow());
 
         HBox actions = new HBox(8, copyB, favB, editB, duplicateB, delB, closeB);
-        VBox root = new VBox(10, idCaption, metadata, previewSplit, actions);
+        VBox root = new VBox(10, idCaption, metadata, content, actions);
         root.getStyleClass().add("app-panel");
         root.setPadding(new Insets(12));
 
@@ -1267,7 +1268,6 @@ public final class MainView extends VBox {
         bodyArea.setPromptText("Prompt body…");
         bodyArea.setPrefRowCount(8);
         bodyArea.setWrapText(true);
-        WebView bodyPreview = buildMarkdownPreview("");
         TextField tagsField = new TextField();
         applyUnicodeFriendlyFont(titleField);
         applyUnicodeFriendlyFont(bodyArea);
@@ -1307,7 +1307,6 @@ public final class MainView extends VBox {
         if (isEdit) {
             titleField.setText(PromptTextFormatter.nullToEmpty(existing.getTitle()));
             bodyArea.setText(PromptTextFormatter.nullToEmpty(existing.getBody()));
-            loadMarkdownPreview(bodyPreview, existing.getBody());
             tagsField.setText(PromptTextFormatter.tagsCsvForEditor(existing.getTags()));
             String editCategory = InputText.trimToEmpty(existing.getCategory());
             if (editCategory.isEmpty()) {
@@ -1322,14 +1321,12 @@ public final class MainView extends VBox {
         grid.add(new Label("Title"), 0, r);
         grid.add(titleField, 1, r++);
         grid.add(new Label("Body"), 0, r);
-        grid.add(buildEditorBodyTabs(bodyArea, bodyPreview), 1, r++);
+        grid.add(bodyArea, 1, r++);
         grid.add(new Label("Tags"), 0, r);
         grid.add(tagsField, 1, r);
         r++;
         grid.add(new Label("Category"), 0, r);
         grid.add(categoryRow, 1, r);
-        bodyArea.textProperty().addListener((obs, oldValue, newValue) ->
-                loadMarkdownPreview(bodyPreview, newValue));
         dialog.getDialogPane().setContent(grid);
         attachLightDialogStyles(dialog.getDialogPane());
 
@@ -1354,7 +1351,7 @@ public final class MainView extends VBox {
             return;
         }
         String title = InputText.trimToEmpty(titleField.getText());
-        String body = InputText.trimToEmpty(bodyArea.getText());
+        String body = InputText.normalizeUnicode(bodyArea.getText());
         try {
             PromptTemplate saved;
             String chosenCategory = InputText.trimToEmpty(categoryDropdown.getSelectionModel().getSelectedItem());
@@ -1410,52 +1407,6 @@ public final class MainView extends VBox {
 
     private static void applyUnicodeFriendlyFont(Node node) {
         node.setStyle("-fx-font-family: " + UNICODE_INPUT_FONT_STACK + ";");
-    }
-
-    private WebView buildMarkdownPreview(String markdown) {
-        WebView webView = new WebView();
-        webView.getStyleClass().add("markdown-preview");
-        webView.setContextMenuEnabled(false);
-        webView.setMinHeight(240);
-        webView.setPrefHeight(280);
-        loadMarkdownPreview(webView, markdown);
-        VBox.setVgrow(webView, Priority.ALWAYS);
-        return webView;
-    }
-
-    private void loadMarkdownPreview(WebView webView, String markdown) {
-        webView.getEngine().setJavaScriptEnabled(true);
-        webView.getEngine().setUserStyleSheetLocation(null);
-        webView.getEngine().setCreatePopupHandler(features -> null);
-        webView.getEngine().setOnAlert(event -> { });
-        webView.getEngine().setConfirmHandler(param -> false);
-        webView.getEngine().setPromptHandler(param -> "");
-        String html = SafeMarkdownRenderer.renderDocument(markdown, preferences.isDarkMode());
-        String dataUrl = "data:text/html;charset=UTF-8;base64," + 
-            java.util.Base64.getEncoder().encodeToString(html.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-        webView.getEngine().load(dataUrl);
-    }
-
-    private static SplitPane buildPromptPreviewSplit(TextArea bodyArea, WebView previewArea) {
-        VBox bodyBox = new VBox(6, new Label("Prompt body"), bodyArea);
-        VBox previewBox = new VBox(6, new Label("Rendered preview"), previewArea);
-        VBox.setVgrow(bodyArea, Priority.ALWAYS);
-        VBox.setVgrow(previewArea, Priority.ALWAYS);
-        SplitPane split = new SplitPane(bodyBox, previewBox);
-        split.setDividerPositions(0.52);
-        VBox.setVgrow(split, Priority.ALWAYS);
-        return split;
-    }
-
-    private static TabPane buildEditorBodyTabs(TextArea bodyArea, WebView previewArea) {
-        Tab writeTab = new Tab("Write", bodyArea);
-        writeTab.setClosable(false);
-        Tab previewTab = new Tab("Preview", previewArea);
-        previewTab.setClosable(false);
-        TabPane tabs = new TabPane(writeTab, previewTab);
-        tabs.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
-        tabs.setPrefHeight(280);
-        return tabs;
     }
 
     private void refreshDeleteCategoryDropdown(ComboBox<String> dropdown) {

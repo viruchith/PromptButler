@@ -17,7 +17,7 @@ Original product vision referenced **Java 8** + bundled FX; **Maven-hosted OpenJ
 - Body revision history (`revisions`) persisted with bounded history when a template body is edited.
 - Search now uses tiered matching (prefix/contains on title+tags, body contains) with cutoff filtering and bounded Levenshtein.
 - Compile behavior now supports optional quoted substitutions (`quoteCompiledVariables` preference).
-- New UI capabilities: duplicate template, undo delete, shortcut help (F1), drag/drop JSON import, selected-items export, markdown-style preview, and toast-style status feedback.
+- New UI capabilities: duplicate template, undo delete, shortcut help (F1), drag/drop JSON import, selected-items export, plain-text body view (Markdown preview later removed), and toast-style status feedback.
 - Preferences expanded with dark mode/settings dialog, default category, quote behavior, and persisted window position/size.
 - Reliability improvements: atomic file writes and live filesystem watch/reload for prompts/preferences.
 
