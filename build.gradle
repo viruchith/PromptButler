@@ -17,7 +17,7 @@ plugins {
 }
 
 group = 'com.viruchith.promptbutler'
-version = '0.4.6'
+version = '0.5.0'
 
 def envProfile = (project.findProperty('env') ?: 'prod').toString().toLowerCase()
 
@@ -295,7 +295,7 @@ check.dependsOn jacocoTestCoverageVerification
 // Run with:
 //   java --add-exports=javafx.graphics/com.sun.glass.ui=ALL-UNNAMED \
 //        --add-opens=javafx.graphics/com.sun.glass.ui=ALL-UNNAMED \
-//        -jar build/libs/prompt-butler-0.4.6-all.jar
+//        -jar build/libs/prompt-butler-0.5.0-all.jar
 shadowJar {
     archiveClassifier = 'all'
     mergeServiceFiles()
