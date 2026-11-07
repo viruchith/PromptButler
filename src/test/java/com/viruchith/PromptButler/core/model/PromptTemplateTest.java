@@ -23,7 +23,7 @@ class PromptTemplateTest {
     }
 
     @Test
-    void trimsIdTitleBodyAndTags() {
+    void trimsIdTitleAndTagsButKeepsBodyVerbatim() {
         PromptTemplate p = new PromptTemplate(
                 "  id1  ",
                 "  T  ",
@@ -31,8 +31,19 @@ class PromptTemplateTest {
                 Arrays.asList("  a  ", "", null, "  b "));
         assertEquals("id1", p.getId());
         assertEquals("T", p.getTitle());
-        assertEquals("body", p.getBody());
+        assertEquals("  body  ", p.getBody());
         assertEquals(Arrays.asList("a", "b"), p.getTags());
+    }
+
+    @Test
+    void preservesPlainTextFormattingAndLiteralMarkdown() {
+        String body = "\n\t# Heading stays literal\n\n    indented  **not bold**\r\n\t\t- [ ] tab item\n\n\n"
+                + "தமிழ் 中文 العربية 👨🏽‍💻 🏳️‍🌈\n  ";
+        PromptTemplate p = new PromptTemplate("id", "title", body, Collections.emptyList());
+        assertEquals(body, p.getBody());
+        PromptTemplate edited = p.withEditedContent("title", body + "\n", Collections.emptyList(), "General");
+        assertEquals(body + "\n", edited.getBody());
+        assertEquals(body, edited.getRevisions().get(0).getBody());
     }
 
     @Test

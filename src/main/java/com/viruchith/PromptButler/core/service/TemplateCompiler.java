@@ -19,7 +19,7 @@ public final class TemplateCompiler {
     }
 
     public String compile(String templateBody, Map<String, String> values, boolean quoteValues) {
-        String body = InputText.trimToEmpty(Objects.requireNonNull(templateBody, "templateBody"));
+        String body = InputText.normalizeUnicode(Objects.requireNonNull(templateBody, "templateBody"));
         Objects.requireNonNull(values, "values");
         Matcher m = PLACEHOLDER.matcher(body);
         StringBuffer sb = new StringBuffer();

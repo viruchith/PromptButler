@@ -14,7 +14,7 @@ For **developers** (architecture, packages, build internals, extension points), 
 
 ---
 
-**Version:** `0.4.5` (see `build.gradle` → `version`).
+**Version:** `0.4.6` (see `build.gradle` → `version`).
 
 ## Table of contents
 
@@ -48,7 +48,7 @@ For **developers** (architecture, packages, build internals, extension points), 
 | **Configurable hotkey** | Override the global toggle shortcut in `preferences.json` (`hotkeyKeyCode`, `hotkeyModifiers`). |
 | **Data folder** | Toolbar **Data Folder** sets where `prompts.json` / `preferences.json` live (pointer under `~/PromptButler/`; restart to apply). |
 | **Live reload** | `prompts.json` / `preferences.json` updates are watched and reloaded at runtime. |
-| **Markdown preview** | Prompt details show raw body + rendered preview side by side, and the editor now includes a live WebView preview with Unicode, system emoji rendering via platform font fallback, tables, task lists, code fences, Mermaid rendering, syntax highlighting, and a hardened sanitization pipeline for untrusted prompt content. |
+| **Plain-text prompts** | Bodies are stored and shown as UTF-8 plain text exactly as written: line breaks, blank lines, spaces, tabs, indentation, emoji, and multilingual scripts are preserved. Markdown or HTML syntax is kept as literal text and never rendered. |
 
 ```mermaid
 flowchart LR
@@ -83,7 +83,7 @@ flowchart LR
 | Goal | What to do |
 |------|------------|
 | Copy the **raw template body** (placeholders **not** filled) | Click the **Copy** icon on the row, **or** select the row and press **Ctrl+C** (list focused, not the search field). The overlay stays open; a short “Copied” status appears. |
-| Open read-only **details** (id, body, rendered preview, actions) | **Single-click** the row (not on the row’s Copy icon). A modal opens with prompt metadata plus a split raw/preview view and actions like **Copy**, **Edit**, **Delete**, **Close**. |
+| Open read-only **details** (id, body, actions) | **Single-click** the row (not on the row’s Copy icon). A modal opens with prompt metadata, the plain-text body, and actions like **Copy**, **Edit**, **Delete**, **Close**. |
 
 ### 4. Use a prompt with `{{variables}}` (separate window)
 
@@ -116,7 +116,7 @@ If the body has **no** `{{placeholders}}`:
 
 | Button | Use it to… |
 |--------|------------|
-| **New** | Create a template (title, body, tags, category). Category is selected from a dropdown and supports **New Category** popup creation, and the body editor includes a live markdown preview tab. |
+| **New** | Create a template (title, body, tags, category). Category is selected from a dropdown and supports **New Category** popup creation. The body is a plain-text editor. |
 | **Shortcuts** | Show keyboard shortcut help (**F1**). |
 | **Import** | Replace the whole library from a JSON file (ids are reassigned on import). Drag-and-drop `.json` import is supported. |
 | **Export** | Export selected templates, or all templates if none are selected. |
@@ -136,7 +136,7 @@ flowchart TD
     Overlay --> List[List of prompts]
     List --> Detail[Single-click detail window]
     List --> Choose[Double-click or Enter]
-    Detail --> RawPreview[Raw body + rendered preview]
+    Detail --> RawBody[Plain-text body + actions]
     Choose --> VariableCheck{Contains placeholders?}
     VariableCheck -- Yes --> VariableWindow[Modeless variables window]
     VariableCheck -- No --> Clipboard[Clipboard copy + hide]
@@ -219,38 +219,15 @@ For IDE debugging, run `com.viruchith.PromptButler.PromptButlerApp` with these V
 
 That gives you breakpoints, the dev profile, and visible console logs in the IDE run/debug console.
 
-## Markdown preview security
+## Plain-text content model
 
-Prompt content is treated as **untrusted input** throughout preview rendering. The current pipeline is:
+Prompt bodies are **plain text only**. There is no Markdown, HTML, or rich-text rendering anywhere in the app, so there is no embedded browser engine and no HTML attack surface.
 
-```mermaid
-flowchart LR
-    A[Markdown source] --> B[Unicode normalization]
-    B --> C[Flexmark parse]
-    C --> D[HTML generation with escaped raw HTML]
-    D --> E[SafeMarkdownRenderer sanitization and policy enforcement]
-    E --> F[WebView rendering]
-```
-
-- **Links:** only `http`, `https`, and `mailto` survive sanitization; preview clicks are suppressed inside the embedded WebView.
-- **Images:** blocked in preview to prevent local-file access, beaconing, and unsafe URI handling.
-- **Mermaid:** rendered from fenced `mermaid` blocks only, with strict Mermaid security mode and size limits.
-- **Unsafe HTML:** scripts, inline handlers, frames, styles, SVG payloads, and unsupported tags are neutralized so they render only as inert text or are flattened from the preview DOM.
-- **Large content:** preview size limits prevent oversized markdown, giant tables, and oversized Mermaid/code blocks from freezing the UI.
-- **Emoji handling:** preview rendering now preserves emoji code points as HTML entities after markdown generation and relies on the host platform's emoji font stack in JavaFX WebView for final rendering. The preview does not depend on markdown `:shortcode:` emoji expansion.
-- **Known limitation:** the current renderer work focused on restoring emoji behavior in preview. Inline images remain intentionally blocked, and some non-emoji symbol/code-point cases may still need follow-up investigation if they are transformed before the preview policy layer sees them.
-
-### Security posture summary
-
-| Area | Current control |
-|------|------------------|
-| XSS / HTML injection | Raw HTML is escaped before DOM sanitization and only a narrow HTML subset survives |
-| Link handling | Only `http`, `https`, and `mailto` are kept; preview links are non-clickable inside WebView |
-| Images | Disabled in preview |
-| Mermaid | Rendered only from fenced Mermaid blocks with `securityLevel: 'strict'` and size caps |
-| Unicode abuse | Preview warns on bidi override, invisible formatting, and suspicious mixed-script content |
-| Clipboard | Clipboard receives the user’s compiled/plain text intentionally; preview sanitization does not mutate exported prompt content |
-| Import/export | UTF-8 + schema validation + file size cap preserve compatibility while rejecting malformed payloads |
+- **Storage:** `prompts.json` is read and written as **UTF-8** (Gson with HTML escaping disabled), so emoji and non-Latin scripts are stored as-is rather than as escape sequences.
+- **Fidelity:** bodies are never trimmed or reformatted. Line breaks, blank lines, leading/trailing spaces, tabs, and indentation round-trip exactly. Text is only Unicode **NFC**-normalized (canonically equivalent, visually identical) so search matches composed and decomposed forms alike.
+- **Literal Markdown:** existing content such as `# Heading`, `**bold**`, or fenced code blocks is shown and copied verbatim.
+- **Display:** bodies appear in standard JavaFX `TextArea` controls using a Unicode-friendly font stack with emoji fallback.
+- **Import/export:** UTF-8 + schema validation + file size cap preserve compatibility while rejecting malformed payloads.
 
 ---
 
@@ -310,7 +287,7 @@ Uses the [Shadow plugin](https://gradleup.com/shadow/) to produce one self-conta
 .\gradlew.bat shadowJar
 ```
 
-Output: `build/libs/prompt-butler-0.4.5-all.jar`
+Output: `build/libs/prompt-butler-0.4.6-all.jar`
 
 **Run on the target machine:**
 
@@ -318,10 +295,10 @@ Output: `build/libs/prompt-butler-0.4.5-all.jar`
 # macOS / Linux
 java --add-exports=javafx.graphics/com.sun.glass.ui=ALL-UNNAMED \
      --add-opens=javafx.graphics/com.sun.glass.ui=ALL-UNNAMED \
-     -jar build/libs/prompt-butler-0.4.5-all.jar
+     -jar build/libs/prompt-butler-0.4.6-all.jar
 
 # Windows (single line)
-java --add-exports=javafx.graphics/com.sun.glass.ui=ALL-UNNAMED --add-opens=javafx.graphics/com.sun.glass.ui=ALL-UNNAMED -jar build\libs\prompt-butler-0.4.5-all.jar
+java --add-exports=javafx.graphics/com.sun.glass.ui=ALL-UNNAMED --add-opens=javafx.graphics/com.sun.glass.ui=ALL-UNNAMED -jar build\libs\prompt-butler-0.4.6-all.jar
 ```
 
 > **Why the JVM flags?** `PromptButlerApp` accesses `com.sun.glass.ui` internals for the global hotkey and tray integration. These are the same flags already declared in `applicationDefaultJvmArgs` in `build.gradle` for the `run` and `installDist` paths.
@@ -353,7 +330,7 @@ The Gradle **`maven-publish`** plugin is **not** configured here. To publish the
 
 **UI summary:** Row **Copy**; single-click opens a **detail** window (copy / favorite / edit / duplicate / delete). **New** creates prompts (UUID ids, category dropdown + category popup). **Import** replaces the library; drag/drop `.json` works. **Double-click** or **Enter** on the list runs the choose flow (variables or copy-and-hide). **Ctrl/Cmd+C** copies selected body when list is focused.
 The main Category filter now applies immediately and remains selected until changed.
-Prompt details now show the raw prompt body and rendered markdown preview together, and the editor preview tab reflects body changes live.
+Prompt details and the editor show the body as plain text, exactly as stored.
 
 **Logging:** application logging is now backed by **SLF4J + Logback** via `src/main/resources/logback.xml`, while existing code continues to use the `AppLogger` facade.
 
