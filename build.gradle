@@ -4,6 +4,8 @@
  * Copyright (C) 2026 Prompt Butler contributors.
  */
 
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.util.regex.Matcher
 
 plugins {
@@ -317,21 +319,107 @@ shadowJar {
     // Launcher is a plain class (not extending Application) that delegates to
     // PromptButlerApp.main(); JavaFX refuses classpath launches when Main-Class
     // directly extends Application.
+    //
+    // Additionally, macOS OpenJFX ships separate .dylib binaries for x86_64 (mac)
+    // and arm64 (mac-aarch64) with identical root paths in their respective JARs.
+    // When merged blindly, one architecture overwrites the other, causing UnsatisfiedLinkError
+    // on the overridden architecture. Here, we extract both slices for each macOS .dylib
+    // and stitch them into a standard Mach-O Universal (Fat) Binary so the fat JAR runs
+    // on both Intel and Apple Silicon Macs.
     doLast {
         def jar = archiveFile.get().asFile
         def tmp = new File(jar.parentFile, "${jar.name}.tmp")
+
+        // Locate x86_64 and aarch64 macOS JavaFX graphics jars from runtimeClasspath
+        def runtimeArtifacts = project.configurations.runtimeClasspath.resolvedConfiguration.resolvedArtifacts
+        def macX64Jar = runtimeArtifacts.find { it.moduleVersion.id.group == 'org.openjfx' && it.name == 'javafx-graphics' && it.classifier == 'mac' }?.file
+        def macArmJar = runtimeArtifacts.find { it.moduleVersion.id.group == 'org.openjfx' && it.name == 'javafx-graphics' && it.classifier == 'mac-aarch64' }?.file
+
+        Map<String, byte[]> universalDylibs = [:]
+        if (macX64Jar?.exists() && macArmJar?.exists()) {
+            Map<String, byte[]> x64Dylibs = [:]
+            Map<String, byte[]> armDylibs = [:]
+
+            new java.util.jar.JarFile(macX64Jar).withCloseable { jf ->
+                jf.entries().each { entry ->
+                    if (entry.name.endsWith('.dylib')) {
+                        x64Dylibs[entry.name] = jf.getInputStream(entry).bytes
+                    }
+                }
+            }
+            new java.util.jar.JarFile(macArmJar).withCloseable { jf ->
+                jf.entries().each { entry ->
+                    if (entry.name.endsWith('.dylib')) {
+                        armDylibs[entry.name] = jf.getInputStream(entry).bytes
+                    }
+                }
+            }
+
+            // Create Mach-O Universal Binary for each matching dylib
+            x64Dylibs.each { name, x64Bytes ->
+                byte[] armBytes = armDylibs[name]
+                if (armBytes != null) {
+                    // Read cputype and cpusubtype from Mach-O 64-bit headers (little endian offset 4 and 8)
+                    ByteBuffer bb1 = ByteBuffer.wrap(x64Bytes).order(ByteOrder.LITTLE_ENDIAN)
+                    int cp1 = bb1.getInt(4)
+                    int cs1 = bb1.getInt(8)
+
+                    ByteBuffer bb2 = ByteBuffer.wrap(armBytes).order(ByteOrder.LITTLE_ENDIAN)
+                    int cp2 = bb2.getInt(4)
+                    int cs2 = bb2.getInt(8)
+
+                    int fatMagic = 0xcafebabe
+                    int alignPow = 14 // 16384 bytes page alignment (required by macOS arm64 loader)
+                    int align = 1 << alignPow
+                    int headerSize = 8 + 2 * 20
+                    int offset1 = (headerSize + align - 1) & ~(align - 1)
+                    int offset2 = (offset1 + x64Bytes.length + align - 1) & ~(align - 1)
+                    int totalSize = offset2 + armBytes.length
+
+                    byte[] fatData = new byte[totalSize]
+                    ByteBuffer outBb = ByteBuffer.wrap(fatData).order(ByteOrder.BIG_ENDIAN)
+                    outBb.putInt(0, fatMagic)
+                    outBb.putInt(4, 2) // 2 architectures
+
+                    // Slice 1: x86_64
+                    outBb.putInt(8, cp1)
+                    outBb.putInt(12, cs1)
+                    outBb.putInt(16, offset1)
+                    outBb.putInt(20, x64Bytes.length)
+                    outBb.putInt(24, alignPow)
+
+                    // Slice 2: arm64
+                    outBb.putInt(28, cp2)
+                    outBb.putInt(32, cs2)
+                    outBb.putInt(36, offset2)
+                    outBb.putInt(40, armBytes.length)
+                    outBb.putInt(44, alignPow)
+
+                    System.arraycopy(x64Bytes, 0, fatData, offset1, x64Bytes.length)
+                    System.arraycopy(armBytes, 0, fatData, offset2, armBytes.length)
+
+                    universalDylibs[name] = fatData
+                }
+            }
+        }
+
         def newManifest = new java.util.jar.Manifest()
         newManifest.mainAttributes.put(java.util.jar.Attributes.Name.MANIFEST_VERSION, '1.0')
         newManifest.mainAttributes.put(java.util.jar.Attributes.Name.MAIN_CLASS,
                 'com.viruchith.PromptButler.Launcher')
         newManifest.mainAttributes.put(java.util.jar.Attributes.Name.IMPLEMENTATION_TITLE, 'Prompt Butler')
         newManifest.mainAttributes.put(java.util.jar.Attributes.Name.IMPLEMENTATION_VERSION, project.version.toString())
+
         new java.util.jar.JarOutputStream(new FileOutputStream(tmp), newManifest).withCloseable { out ->
             new java.util.jar.JarFile(jar).withCloseable { src ->
                 src.entries().each { entry ->
                     if (entry.name == 'META-INF/MANIFEST.MF') return
                     out.putNextEntry(new java.util.jar.JarEntry(entry.name))
-                    src.getInputStream(entry).withCloseable { inn -> out << inn }
+                    if (universalDylibs.containsKey(entry.name)) {
+                        out.write(universalDylibs[entry.name])
+                    } else {
+                        src.getInputStream(entry).withCloseable { inn -> out << inn }
+                    }
                     out.closeEntry()
                 }
             }
