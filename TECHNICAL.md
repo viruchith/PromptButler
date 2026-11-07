@@ -2,7 +2,7 @@
 
 This document is for **developers** maintaining or extending the codebase. End-user usage remains in [README.md](README.md).
 
-Current project version: **`0.5.0`**.
+Current project version: **`0.5.1`**.
 
 ---
 
