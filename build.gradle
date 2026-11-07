@@ -17,7 +17,7 @@ plugins {
 }
 
 group = 'com.viruchith.promptbutler'
-version = '0.5.0'
+version = '0.5.1'
 
 def envProfile = (project.findProperty('env') ?: 'prod').toString().toLowerCase()
 
@@ -29,6 +29,10 @@ java {
 
 repositories {
     mavenCentral()
+}
+
+configurations {
+    linuxAarch64Natives
 }
 
 dependencies {
@@ -54,6 +58,11 @@ dependencies {
             runtimeOnly "org.openjfx:${module}:21.0.6:${platform}"
         }
     }
+
+    // OpenJFX does not publish 21.0.6 for linux-aarch64 to Maven Central.
+    // We resolve linux-aarch64 from 21.0.11 and package its native .so libraries
+    // into native/linux-aarch64/ within the fat JAR.
+    linuxAarch64Natives 'org.openjfx:javafx-graphics:21.0.11:linux-aarch64'
 }
 
 javafx {
@@ -295,7 +304,7 @@ check.dependsOn jacocoTestCoverageVerification
 // Run with:
 //   java --add-exports=javafx.graphics/com.sun.glass.ui=ALL-UNNAMED \
 //        --add-opens=javafx.graphics/com.sun.glass.ui=ALL-UNNAMED \
-//        -jar build/libs/prompt-butler-0.5.0-all.jar
+//        -jar build/libs/prompt-butler-0.5.1-all.jar
 shadowJar {
     archiveClassifier = 'all'
     mergeServiceFiles()
@@ -320,12 +329,18 @@ shadowJar {
     // PromptButlerApp.main(); JavaFX refuses classpath launches when Main-Class
     // directly extends Application.
     //
-    // Additionally, macOS OpenJFX ships separate .dylib binaries for x86_64 (mac)
-    // and arm64 (mac-aarch64) with identical root paths in their respective JARs.
-    // When merged blindly, one architecture overwrites the other, causing UnsatisfiedLinkError
-    // on the overridden architecture. Here, we extract both slices for each macOS .dylib
-    // and stitch them into a standard Mach-O Universal (Fat) Binary so the fat JAR runs
-    // on both Intel and Apple Silicon Macs.
+    // Additionally:
+    // 1. macOS OpenJFX ships separate .dylib binaries for x86_64 (mac)
+    //    and arm64 (mac-aarch64) with identical root paths in their respective JARs.
+    //    We extract both slices for each macOS .dylib and stitch them into a standard
+    //    Mach-O Universal (Fat) Binary so the fat JAR runs on both Intel and Apple Silicon Macs.
+    // 2. Linux ELF shared libraries (.so) do not support universal binaries.
+    //    OpenJFX bundles x86_64 .so files at the root of javafx-graphics-linux.jar.
+    //    To support Linux on both x86_64 and AArch64 (ARM64), we move the x86_64 .so files
+    //    under native/linux-x86_64/ and package the aarch64 .so files under native/linux-aarch64/.
+    //    Root .so entries are excluded so OpenJFX does not blindly extract incompatible AMD64
+    //    binaries on AArch64 systems. At startup, Launcher extracts and configures the matching
+    //    architecture's libraries.
     doLast {
         def jar = archiveFile.get().asFile
         def tmp = new File(jar.parentFile, "${jar.name}.tmp")
@@ -334,6 +349,8 @@ shadowJar {
         def runtimeArtifacts = project.configurations.runtimeClasspath.resolvedConfiguration.resolvedArtifacts
         def macX64Jar = runtimeArtifacts.find { it.moduleVersion.id.group == 'org.openjfx' && it.name == 'javafx-graphics' && it.classifier == 'mac' }?.file
         def macArmJar = runtimeArtifacts.find { it.moduleVersion.id.group == 'org.openjfx' && it.name == 'javafx-graphics' && it.classifier == 'mac-aarch64' }?.file
+        def linuxX64Jar = runtimeArtifacts.find { it.moduleVersion.id.group == 'org.openjfx' && it.name == 'javafx-graphics' && it.classifier == 'linux' }?.file
+        def linuxArmJar = project.configurations.linuxAarch64Natives.resolvedConfiguration.resolvedArtifacts.find { it.moduleVersion.id.group == 'org.openjfx' && it.name == 'javafx-graphics' && it.classifier == 'linux-aarch64' }?.file
 
         Map<String, byte[]> universalDylibs = [:]
         if (macX64Jar?.exists() && macArmJar?.exists()) {
@@ -403,6 +420,27 @@ shadowJar {
             }
         }
 
+        // Collect architecture-segregated Linux .so binaries
+        Map<String, byte[]> archLinuxSo = [:]
+        if (linuxX64Jar?.exists()) {
+            new java.util.jar.JarFile(linuxX64Jar).withCloseable { jf ->
+                jf.entries().each { entry ->
+                    if (entry.name.endsWith('.so') && !entry.name.contains('/')) {
+                        archLinuxSo["native/linux-x86_64/${entry.name}"] = jf.getInputStream(entry).bytes
+                    }
+                }
+            }
+        }
+        if (linuxArmJar?.exists()) {
+            new java.util.jar.JarFile(linuxArmJar).withCloseable { jf ->
+                jf.entries().each { entry ->
+                    if (entry.name.endsWith('.so') && !entry.name.contains('/')) {
+                        archLinuxSo["native/linux-aarch64/${entry.name}"] = jf.getInputStream(entry).bytes
+                    }
+                }
+            }
+        }
+
         def newManifest = new java.util.jar.Manifest()
         newManifest.mainAttributes.put(java.util.jar.Attributes.Name.MANIFEST_VERSION, '1.0')
         newManifest.mainAttributes.put(java.util.jar.Attributes.Name.MAIN_CLASS,
@@ -414,6 +452,9 @@ shadowJar {
             new java.util.jar.JarFile(jar).withCloseable { src ->
                 src.entries().each { entry ->
                     if (entry.name == 'META-INF/MANIFEST.MF') return
+                    // Omit root-level Linux .so files to prevent architecture collision on AArch64
+                    if (entry.name.endsWith('.so') && !entry.name.contains('/')) return
+
                     out.putNextEntry(new java.util.jar.JarEntry(entry.name))
                     if (universalDylibs.containsKey(entry.name)) {
                         out.write(universalDylibs[entry.name])
@@ -422,6 +463,12 @@ shadowJar {
                     }
                     out.closeEntry()
                 }
+            }
+            // Append segregated Linux native binaries
+            archLinuxSo.each { path, bytes ->
+                out.putNextEntry(new java.util.jar.JarEntry(path))
+                out.write(bytes)
+                out.closeEntry()
             }
         }
         jar.delete()

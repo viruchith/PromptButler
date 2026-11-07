@@ -2,6 +2,14 @@
 
 All notable changes to Prompt Butler are documented in this file.
 
+## 0.5.1
+
+### Fixed
+
+- Fixed `UnsatisfiedLinkError` on Linux ARM64 / AArch64 (e.g. Kali Linux in UTM on Apple Silicon, Raspberry Pi, AWS Graviton) where OpenJFX attempted to load AMD64/x86_64 `.so` libraries on an AArch64 platform.
+- Segregated Linux shared libraries into `/native/linux-x86_64/` and `/native/linux-aarch64/` inside the fat JAR (`shadowJar`), removing root-level `.so` collisions.
+- Enhanced `Launcher.java` to automatically detect host CPU architecture on Linux, extract the matching `.so` binaries, update `java.library.path`, and pre-load the native toolkit.
+
 ## 0.5.0
 
 ### Fixed
