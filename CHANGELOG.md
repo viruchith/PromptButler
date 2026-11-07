@@ -8,6 +8,7 @@ All notable changes to Prompt Butler are documented in this file.
 
 - Fixed `UnsatisfiedLinkError` when executing the cross-platform fat JAR (`shadowJar`) on Apple Silicon Macs (`aarch64` / arm64).
 - Merged macOS OpenJFX native dynamic libraries (`x86_64` and `arm64`) into standard 16 KB page-aligned Mach-O Universal Binaries during the `shadowJar` build, allowing the single fat JAR to run natively on both Intel and Apple Silicon Macs without native collision or architecture mismatch errors.
+- Fixed `UnsatisfiedLinkError` on Linux ARM64 / AArch64 (e.g. Kali Linux, Raspberry Pi, AWS Graviton) by segregating Linux `.so` shared libraries into `/native/linux-x86_64/` and `/native/linux-aarch64/` and extracting/configuring the architecture-matching libraries at startup in `Launcher.java`.
 
 ## 0.4.6
 
